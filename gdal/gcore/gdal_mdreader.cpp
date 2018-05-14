@@ -60,6 +60,10 @@
 #include "mdreader/reader_rapid_eye.h"
 #include "mdreader/reader_rdk1.h"
 #include "mdreader/reader_spot.h"
+#include "mdreader/reader_gaofen.h"
+#include "mdreader/reader_tianhui.h"
+#include "mdreader/reader_triplesat.h"
+#include "mdreader/reader_ziyuan.h"
 
 CPL_CVSID("$Id$")
 
@@ -180,6 +184,31 @@ GDALMDReaderBase* GDALMDReaderManager::GetReader(const char *pszPath,
     {
         INIT_READER(GDALMDReaderALOS);
     }
+
+	if (nType & MDR_GF)
+	{
+		INIT_READER(GDALMDReaderGaoFen);
+	}
+
+	if (nType & MDR_TH)
+	{
+		INIT_READER(GDALMDReaderTianHui);
+	}
+
+	if (nType & MDR_TS)
+	{
+		INIT_READER(GDALMDReaderTripleSat);
+	}
+
+	if (nType & MDR_ZY02C)
+	{
+		INIT_READER(GDALMDReaderZiYuan02C);
+	}
+
+	if (nType & MDR_ZY3)
+	{
+		INIT_READER(GDALMDReaderZiYuan3);
+	}
 
     return nullptr;
 }
@@ -498,9 +527,9 @@ static const char * const apszRPBMap[] = {
     apszRPCTXT20ValItems[3], "IMAGE.sampDenCoef",
     nullptr,             nullptr };
 
-char **GDALLoadRPBFile( const CPLString& soFilePath )
+char **GDALLoadRPBFile( const char* soFilePath )
 {
-    if( soFilePath.empty() )
+    if( soFilePath == nullptr)
         return nullptr;
 
 /* -------------------------------------------------------------------- */
@@ -533,7 +562,7 @@ char **GDALLoadRPBFile( const CPLString& soFilePath )
         {
             CPLError( CE_Failure, CPLE_AppDefined,
                       "%s file found, but missing %s field (and possibly others).",
-                      soFilePath.c_str(), apszRPBMap[i+1] );
+                      soFilePath, apszRPBMap[i+1] );
             CSLDestroy( papszMD );
             return nullptr;
         }
@@ -575,9 +604,9 @@ char **GDALLoadRPBFile( const CPLString& soFilePath )
 
 /* Load a GeoEye _rpc.txt file. See ticket http://trac.osgeo.org/gdal/ticket/3639 */
 
-char ** GDALLoadRPCFile( const CPLString& soFilePath )
+char ** GDALLoadRPCFile( const char* soFilePath )
 {
-    if( soFilePath.empty() )
+    if( soFilePath == nullptr )
         return nullptr;
 
 /* -------------------------------------------------------------------- */
@@ -600,7 +629,7 @@ char ** GDALLoadRPCFile( const CPLString& soFilePath )
         {
             CPLError( CE_Failure, CPLE_AppDefined,
                 "%s file found, but missing %s field (and possibly others).",
-                soFilePath.c_str(), apszRPBMap[i]);
+                soFilePath, apszRPBMap[i]);
             CSLDestroy( papszMD );
             CSLDestroy( papszLines );
             return nullptr;
@@ -627,7 +656,7 @@ char ** GDALLoadRPCFile( const CPLString& soFilePath )
             {
                 CPLError( CE_Failure, CPLE_AppDefined,
                     "%s file found, but missing %s field (and possibly others).",
-                    soFilePath.c_str(), soRPBMapItem.c_str() );
+                    soFilePath, soRPBMapItem.c_str() );
                 CSLDestroy( papszMD );
                 CSLDestroy( papszLines );
                 return nullptr;
@@ -946,9 +975,9 @@ static bool GDAL_IMD_AA2R( char ***ppapszIMD )
 /*                          GDALLoadIMDFile()                           */
 /************************************************************************/
 
-char ** GDALLoadIMDFile( const CPLString& osFilePath )
+char ** GDALLoadIMDFile( const char* osFilePath )
 {
-    if( osFilePath.empty() )
+    if( osFilePath == nullptr )
         return nullptr;
 
 /* -------------------------------------------------------------------- */
