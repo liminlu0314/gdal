@@ -45,9 +45,17 @@ using std::string;
 
 std::wstring StringToWString(const std::string& utf8string)
 {
-    wchar_t* pszUTF16 = CPLRecodeToWChar( utf8string.c_str(), CPL_ENC_UTF8, CPL_ENC_UCS2);
+	const char* pszFileGDBEncoding = CPLGetConfigOption("FILEGDB_ENCODING", CPL_ENC_UTF8);
+	char* pszUTF8String = nullptr;
+	if (EQUAL(pszFileGDBEncoding, CPL_ENC_UTF8))
+		pszUTF8String = CPLStrdup(utf8string.c_str());
+	else
+		pszUTF8String = CPLRecode(utf8string.c_str(), pszFileGDBEncoding, CPL_ENC_UTF8);
+
+    wchar_t* pszUTF16 = CPLRecodeToWChar( pszUTF8String, CPL_ENC_UTF8, CPL_ENC_UCS2);
     std::wstring utf16string = pszUTF16;
     CPLFree(pszUTF16);
+	CPLFree(pszUTF8String);
     return utf16string;
 }
 
@@ -60,6 +68,17 @@ std::string WStringToString(const std::wstring& utf16string)
     char* pszUTF8 = CPLRecodeFromWChar( utf16string.c_str(), CPL_ENC_UCS2, CPL_ENC_UTF8 );
     std::string utf8string = pszUTF8;
     CPLFree(pszUTF8);
+
+	const char* pszFileGDBEncoding = CPLGetConfigOption("FILEGDB_ENCODING", CPL_ENC_UTF8);
+	if (EQUAL(pszFileGDBEncoding, CPL_ENC_UTF8))
+		return utf8string;
+	else
+	{
+		char* pszLocalString = CPLRecode(utf8string.c_str(), CPL_ENC_UTF8, pszFileGDBEncoding);
+		utf8string = pszLocalString;
+		CPLFree(pszLocalString);
+		return utf8string; 
+	}
     return utf8string;
 }
 
