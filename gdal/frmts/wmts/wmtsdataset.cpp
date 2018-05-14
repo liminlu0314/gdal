@@ -46,6 +46,7 @@ extern "C" void GDALRegister_WMTS();
 
 /* Set in stone by WMTS spec. In pixel/meter */
 #define WMTS_PITCH                      0.00028
+#define WMTS_PITCH_TDT                  0.000264583333333
 
 #define WMTS_WGS84_DEG_PER_METER    (180 / M_PI / SRS_WGS84_SEMIMAJOR)
 
@@ -153,7 +154,9 @@ class WMTSDataset : public GDALPamDataset
                                 const CPLString& osIdentifier,
                                 const CPLString& osMaxTileMatrixIdentifier,
                                 int nMaxZoomLevel,
-                                WMTSTileMatrixSet& oTMS);
+                                WMTSTileMatrixSet& oTMS,
+								int bIsTianditu = TRUE);
+
     static int          ReadTMLimits(CPLXMLNode* psTMSLimits,
                                      std::map<CPLString, WMTSTileMatrixLimits>& aoMapTileMatrixLimits);
 
@@ -629,7 +632,8 @@ int WMTSDataset::ReadTMS(CPLXMLNode* psContents,
                          const CPLString& osIdentifier,
                          const CPLString& osMaxTileMatrixIdentifier,
                          int nMaxZoomLevel,
-                         WMTSTileMatrixSet& oTMS)
+                         WMTSTileMatrixSet& oTMS,
+						 int bIsTianditu)
 {
     for(CPLXMLNode* psIter = psContents->psChild; psIter != nullptr; psIter = psIter->psNext )
     {
@@ -718,7 +722,7 @@ int WMTSDataset::ReadTMS(CPLXMLNode* psContents,
             WMTSTileMatrix oTM;
             oTM.osIdentifier = l_pszIdentifier;
             oTM.dfScaleDenominator = CPLAtof(pszScaleDenominator);
-            oTM.dfPixelSize = oTM.dfScaleDenominator * WMTS_PITCH;
+			oTM.dfPixelSize = oTM.dfScaleDenominator * ((bIsTianditu == FALSE) ? WMTS_PITCH : WMTS_PITCH_TDT);
             if( oTM.dfPixelSize <= 0.0 )
             {
                 CPLError(CE_Failure, CPLE_AppDefined,
@@ -1002,6 +1006,8 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
                      "<ZeroBlockHttpCodes>204,404</ZeroBlockHttpCodes>"
                      "<ZeroBlockOnServerException>true</ZeroBlockOnServerException>";
 
+	int  bIsTiandituWMTS = FALSE;
+
     if( STARTS_WITH_CI(poOpenInfo->pszFilename, "WMTS:") )
     {
         char** papszTokens = CSLTokenizeString2( poOpenInfo->pszFilename + 5,
@@ -1140,6 +1146,10 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
         CPLDestroyXMLNode(psXML);
         return nullptr;
     }
+
+	CPLString osUrl = GetOperationKVPURL(psXML, "GetCapabilities");
+	if(strstr(osUrl.c_str(), "tianditu") != nullptr)
+		bIsTiandituWMTS = TRUE;
 
     if( STARTS_WITH(osGetCapabilitiesURL, "/vsimem/") )
     {
@@ -1326,7 +1336,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
                             // For 13-082_WMTS_Simple_Profile/schemas/wmts/1.0/profiles/WMTSSimple/examples/wmtsGetCapabilities_response_OSM.xml
                             WMTSTileMatrixSet oTMS;
                             if( ReadTMS(psContents, osSingleTileMatrixSet,
-                                        CPLString(), -1, oTMS) )
+                                        CPLString(), -1, oTMS, bIsTiandituWMTS) )
                             {
                                 osCRS = oTMS.osSRS;
                             }
@@ -1341,6 +1351,10 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
                 {
                     int bSwap = oSRS.EPSGTreatsAsLatLong() ||
                                 oSRS.EPSGTreatsAsNorthingEasting();
+
+					if(bIsTiandituWMTS && bSwap)
+						bSwap = FALSE;
+
                     char** papszLC = CSLTokenizeString(osLowerCorner);
                     char** papszUC = CSLTokenizeString(osUpperCorner);
                     if( CSLCount(papszLC) == 2 && CSLCount(papszUC) == 2 )
@@ -1449,7 +1463,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
 
         WMTSTileMatrixSet oTMS;
         if( !ReadTMS(psContents, osSelectTMS, osMaxTileMatrixIdentifier,
-                     nUserMaxZoomLevel, oTMS) )
+                     nUserMaxZoomLevel, oTMS, bIsTiandituWMTS) )
         {
             CPLDestroyXMLNode(psXML);
             delete poDS;

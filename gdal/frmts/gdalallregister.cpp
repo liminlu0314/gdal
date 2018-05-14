@@ -377,6 +377,7 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_mbtiles
     GDALRegister_MBTiles();
+	GDALRegister_TFATMBTiles();
 #endif
 
 #ifdef FRMT_plmosaic
@@ -551,6 +552,14 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_null
     GDALRegister_NULL();
+#endif
+
+#ifdef FRMT_cnsdtf
+    GDALRegister_CNSDTF();
+#endif
+
+#ifdef FRMT_landsat
+	GDALRegister_LANDSAT();
 #endif
 
 #ifdef GNM_ENABLED

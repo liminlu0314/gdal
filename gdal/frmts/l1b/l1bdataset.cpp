@@ -72,6 +72,7 @@ typedef enum {          // Spacecrafts:
     METOP2,     // METOP-A(2)
     METOP1,     // METOP-B(1)
     METOP3,     // METOP-C(3)
+	METOPS,		// Metop simulator
 } L1BSpaceCraftdID;
 
 typedef enum {          // Product types
@@ -1736,7 +1737,7 @@ CPLErr L1BDataset::ProcessDatasetHeader(const char* pszFilename)
                 eSpacecraftID = METOP3;
                 break;
             case 14:
-                eSpacecraftID = METOP3;
+                eSpacecraftID = METOPS;
                 break;
             default:
 #ifdef DEBUG
@@ -1869,6 +1870,9 @@ CPLErr L1BDataset::ProcessDatasetHeader(const char* pszFilename)
         case METOP3:
             pszText = "METOP-C(3)";
             break;
+		case METOPS:
+			pszText = "Metop simulator";
+			break;
         default:
             pszText = "Unknown";
             break;

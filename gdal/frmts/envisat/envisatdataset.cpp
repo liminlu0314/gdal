@@ -352,6 +352,32 @@ void EnvisatDataset::ScanForGCPs_ASAR()
 
             nGCPCount++;
         }
+
+		//解析入射角信息
+		char szKey[32];
+		char szValue[32];
+
+		//解析Sample
+		memcpy(&unValue, abyRecord + 25 + iRecord * 4, 4);
+		int nSample = CPL_MSBWORD32(unValue);
+		snprintf(szKey, sizeof(szKey), "FIRST_LINE_SAMPLE_%d", iRecord);
+		snprintf(szValue, sizeof(szValue), "%d", nSample);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
+
+		//解析Time
+		float fValue;
+		memcpy(&fValue, abyRecord + 25 + 44 + iRecord * 4, 4);
+		CPL_SWAP32PTR(&fValue);
+		snprintf(szKey, sizeof(szKey), "FIRST_LINE_TIME_%d", iRecord);
+		snprintf(szValue, sizeof(szValue), "%.6f", fValue);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
+
+		//解析Angles
+		memcpy(&fValue, abyRecord + 25 + 88 + iRecord * 4, 4);
+		CPL_SWAP32PTR(&fValue);
+		snprintf(szKey, sizeof(szKey), "FIRST_LINE_ANGLES_%d", iRecord);
+		snprintf(szValue, sizeof(szValue), "%.6f", fValue);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
     }
 
 /* -------------------------------------------------------------------- */
@@ -385,6 +411,30 @@ void EnvisatDataset::ScanForGCPs_ASAR()
         pasGCPList[nGCPCount].dfGCPPixel = nSample - 0.5;
 
         nGCPCount++;
+
+		//解析入射角信息
+		char szKey[32];
+		char szValue[32];
+
+		//解析Sample
+		snprintf(szKey, sizeof(szKey), "LAST_LINE_SAMPLE_%d", iGCP);
+		snprintf(szValue, sizeof(szValue), "%d", nSample);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
+
+		//解析Time
+		float fValue;
+		memcpy(&fValue, abyRecord + 279 + 44 + iGCP * 4, 4);
+		CPL_SWAP32PTR(&fValue);
+		snprintf(szKey, sizeof(szKey), "LAST_LINE_TIME_%d", iGCP);
+		snprintf(szValue, sizeof(szValue), "%.6f", fValue);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
+
+		//解析Angles
+		memcpy(&fValue, abyRecord + 279 + 88 + iGCP * 4, 4);
+		CPL_SWAP32PTR(&fValue);
+		snprintf(szKey, sizeof(szKey), "LAST_LINE_ANGLES_%d", iGCP);
+		snprintf(szValue, sizeof(szValue), "%.6f", fValue);
+		SetMetadataItem(szKey, szValue, "GEOLOCATION_GRID_ADSR");
     }
 }
 

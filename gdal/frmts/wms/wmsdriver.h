@@ -460,8 +460,12 @@ class GDALWMSRasterBand : public GDALPamRasterBand {
                                 GDALWMSTiledImageRequestInfo &tiri,
                                 int x, int y);
 
+	void InitTiandituMap();
+
     CPLString osMetadataItem;
     CPLString osMetadataItemURL;
+
+	std::map<CPLString, CPLString> omTianditu;
 
 public:
     GDALWMSRasterBand( GDALWMSDataset *parent_dataset, int band, double scale );
