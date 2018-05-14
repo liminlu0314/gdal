@@ -63,7 +63,7 @@ CPU_COUNT=%NUMBER_OF_PROCESSORS%
 # But the paths *should* be absolute (relative paths mess up in submakefiles).
 
 !IFNDEF GDAL_HOME
-GDAL_HOME = "E:\Src\RpcBaDir\3rdPart_x64\gdal"
+GDAL_HOME = "E:\TS_Src\trunk\3rd\gdal"
 !ENDIF
 !IFNDEF BINDIR
 BINDIR = "$(GDAL_HOME)\bin"
@@ -226,7 +226,7 @@ STDCALL=YES
 # Version number embedded in DLL name.
 # If GDAL version is X.Y.Z, VERSION = X * 100 + Y
 !IFNDEF VERSION
-VERSION =	301
+VERSION =	303
 !ENDIF
 
 # Comment the following out if you want PAM supported disabled

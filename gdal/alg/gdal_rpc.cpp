@@ -259,14 +259,14 @@ typedef struct {
     double      adfDEMReverseGeoTransform[6];
 
 	int         nRefineOrder;					//RPC adjustment refine order (must be one of 0 1 2)
-	double		adfRefineTransform[12];			//RPC adjustment refine delta transform 
+	double		adfRefineTransform[12];			//RPC adjustment refine delta transform
 	double		adfReverseRefineTransform[12];	//RPC adjustment reverse refine delta transform
 	// order : a0 a1 a2 b0 b1 b2 a3 a4 a5 b3 b4 b5
 	// order :  1  x  y  1  x  y xx yy xy xx yy xy
 	// order 0 a0  0  0 b0  0  0  0  0  0  0  0  0
 	// order 1 a0 a1 a2 b0 b1 b2  0  0  0  0  0  0
 	// order 2 a0 a1 a2 b0 b1 b2 a3 a4 a5 b3 b4 b5
-    
+
 #ifdef USE_SSE2_OPTIM
     double      adfDoubles[20 * 4 + 1];
      // LINE_NUM_COEFF, LINE_DEN_COEFF, SAMP_NUM_COEFF and then SAMP_DEN_COEFF.
@@ -1116,12 +1116,12 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
 				psTransform->adfRefineTransform[11] += atof(papszTokens[11]);
 			}
 			else
-				CPLDebug("RPC", "RPC refine params count(%d) does not match order(%d)", nTokens, nOrder); 
+				CPLDebug("RPC", "RPC refine params count(%d) does not match order(%d)", nTokens, nOrder);
 
 			CSLDestroy(papszTokens);
 		}
 		else
-			CPLDebug("RPC", "RPC refine order must be one of 0 1 2, this is %d", nOrder); 
+			CPLDebug("RPC", "RPC refine order must be one of 0 1 2, this is %d", nOrder);
 	}
 
     if (psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
@@ -2284,7 +2284,7 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
                 //padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine * padfTemp[2] + dfPixel * dfPixel * padfTemp[6] + dfLine * dfLine * padfTemp[7] + dfPixel * dfLine * padfTemp[8];
                 //padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine * padfTemp[5] + dfPixel * dfPixel * padfTemp[9] + dfLine * dfLine * padfTemp[10] + dfPixel * dfLine * padfTemp[11];
 			}
- 
+
             panSuccess[i] = TRUE;
         }
 

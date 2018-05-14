@@ -1,4 +1,4 @@
-/******************************************************************************
+ï»¿/******************************************************************************
  *
  * Project:  High Performance Image Reprojector
  * Purpose:  Implementation of the GDALWarpKernel class.  Implements the actual
@@ -1200,7 +1200,7 @@ CPLErr GDALWarpKernel::PerformWarp()
         return GWKGeneralCase( this );
 
 #if defined(HAVE_OPENCL)
-	//ÅĞ¶ÏÊÇ·ñÉèÖÃÁËÊ¹ÓÃOpenCLµÄÑ¡Ïî
+	//åˆ¤æ–­æ˜¯å¦è®¾ç½®äº†ä½¿ç”¨OpenCLçš„é€‰é¡¹
 	bool bUseOpenCl = CPLFetchBool(papszWarpOptions, "USE_OPENCL", false) || CPLTestBool(CPLGetConfigOption("USE_OPENCL", "FALSE"));
     if( (eWorkingDataType == GDT_Byte
          || eWorkingDataType == GDT_CInt16
