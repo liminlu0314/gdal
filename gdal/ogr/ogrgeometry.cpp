@@ -3445,8 +3445,24 @@ static OGRGeometry* BuildGeometryFromTwoGeoms(
     GEOSGeom hOtherGeosGeom = poOtherGeom->exportToGEOS(hGEOSCtxt);
     if( hThisGeosGeom != nullptr && hOtherGeosGeom != nullptr )
     {
-        GEOSGeom hGeosProduct = pfnGEOSFunction_r(
-            hGEOSCtxt, hThisGeosGeom, hOtherGeosGeom );
+		GEOSGeom hTGeom = hThisGeosGeom;
+		GEOSGeom hOGeom = hOtherGeosGeom;
+
+		bool bUsePrecision = CPLTestBool(CPLGetConfigOption("USE_GEOS_PRECISION", "FALSE"));
+		if (bUsePrecision)
+		{
+			double dfPrecision = CPLAtofM(CPLGetConfigOption("GEOS_PRECISION", "0"));
+			hTGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hThisGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+			hOGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hOtherGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+		}
+
+		GEOSGeom hGeosProduct = pfnGEOSFunction_r(hGEOSCtxt, hTGeom, hOGeom);
+
+		if (bUsePrecision)
+		{
+			GEOSGeom_destroy_r(hGEOSCtxt, hTGeom);
+			GEOSGeom_destroy_r(hGEOSCtxt, hOGeom);
+		}
 
         poOGRProduct = BuildGeometryFromGEOS(hGEOSCtxt, hGeosProduct,
                                              poSelf, poOtherGeom);
@@ -3476,7 +3492,24 @@ static OGRBoolean OGRGEOSBooleanPredicate(
     GEOSGeom hOtherGeosGeom = poOtherGeom->exportToGEOS(hGEOSCtxt);
     if( hThisGeosGeom != nullptr && hOtherGeosGeom != nullptr )
     {
-        bResult = pfnGEOSFunction_r( hGEOSCtxt, hThisGeosGeom, hOtherGeosGeom );
+		GEOSGeom hTGeom = hThisGeosGeom;
+		GEOSGeom hOGeom = hOtherGeosGeom;
+
+		bool bUsePrecision = CPLTestBool(CPLGetConfigOption("USE_GEOS_PRECISION", "FALSE"));
+		if (bUsePrecision)
+		{
+			double dfPrecision = CPLAtofM(CPLGetConfigOption("GEOS_PRECISION", "0"));
+			hTGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hThisGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+			hOGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hOtherGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+		}
+
+        bResult = pfnGEOSFunction_r( hGEOSCtxt, hTGeom, hOGeom );
+
+		if (bUsePrecision)
+		{
+			GEOSGeom_destroy_r(hGEOSCtxt, hTGeom);
+			GEOSGeom_destroy_r(hGEOSCtxt, hOGeom);
+		}
     }
     GEOSGeom_destroy_r( hGEOSCtxt, hThisGeosGeom );
     GEOSGeom_destroy_r( hGEOSCtxt, hOtherGeosGeom );
