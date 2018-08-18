@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  *
  * Project:  PDS Driver; Planetary Data System Format
  * Purpose:  Implementation of NASAKeywordHandler - a class to read
@@ -231,9 +231,25 @@ int NASAKeywordHandler::ReadPair( CPLString &osName, CPLString &osValue,
 
     pszHeaderNext++;
 
-    SkipWhite();
+	if (!EQUAL(osName, "OBJECT") && !EQUAL(osName, "GROUP") &&
+		(*pszHeaderNext == 13 && pszHeaderNext[1] == 10))
+	{
+		pszHeaderNext += 2;
+		oCur.Add(osName, "");
+		return TRUE;
+	}
+	else if (!EQUAL(osName, "OBJECT") && !EQUAL(osName, "GROUP") &&
+		*pszHeaderNext == 10)
+	{
+		pszHeaderNext++;
+		oCur.Add(osName, "");
+		return TRUE;
+	}
+	else
+	{
+		SkipWhite();
+	}
 
-    osValue = "";
     bool bIsString = true;
 
     // Handle value lists like:
