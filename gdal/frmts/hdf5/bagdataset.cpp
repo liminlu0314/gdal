@@ -29,6 +29,7 @@
 
 #include "cpl_port.h"
 #include "gh5_convenience.h"
+#include "hdf5uffd.h"
 
 #include "cpl_string.h"
 #include "gdal_frmts.h"
@@ -52,6 +53,9 @@ class BAGDataset : public GDALPamDataset
     friend class BAGRasterBand;
 
     hid_t        hHDF5;
+#ifdef ENABLE_UFFD
+    cpl_uffd_context *pCtx = nullptr;
+#endif
 
     char        *pszProjection;
     double       adfGeoTransform[6];
@@ -60,6 +64,7 @@ class BAGDataset : public GDALPamDataset
 
     char        *pszXMLMetadata;
     char        *apszMDList[2];
+
 
 public:
     BAGDataset();
@@ -152,21 +157,20 @@ bool BAGRasterBand::Initialize( hid_t hDatasetIDIn, const char *pszName )
     dataspace = H5Dget_space(hDatasetIDIn);
     const int n_dims = H5Sget_simple_extent_ndims(dataspace);
     native = H5Tget_native_type(datatype, H5T_DIR_ASCEND);
-    hsize_t dims[3] = {
-      static_cast<hsize_t>(0),
-      static_cast<hsize_t>(0),
-      static_cast<hsize_t>(0)
-    };
-    hsize_t maxdims[3] = {
-      static_cast<hsize_t>(0),
-      static_cast<hsize_t>(0),
-      static_cast<hsize_t>(0)
-    };
 
     eDataType = GH5_GetDataType(native);
 
     if( n_dims == 2 )
     {
+        hsize_t dims[2] = {
+            static_cast<hsize_t>(0),
+            static_cast<hsize_t>(0)
+        };
+        hsize_t maxdims[2] = {
+            static_cast<hsize_t>(0),
+            static_cast<hsize_t>(0)
+        };
+
         H5Sget_simple_extent_dims(dataspace, dims, maxdims);
 
         nRasterXSize = static_cast<int>(dims[1]);
@@ -423,6 +427,10 @@ BAGDataset::~BAGDataset()
 {
     FlushCache();
 
+#ifdef ENABLE_UFFD
+    HDF5_UFFD_UNMAP(pCtx);
+#endif
+
     if( hHDF5 >= 0 )
         H5Fclose(hHDF5);
 
@@ -471,8 +479,13 @@ GDALDataset *BAGDataset::Open( GDALOpenInfo *poOpenInfo )
     }
 
     // Open the file as an HDF5 file.
-    hid_t hHDF5 = H5Fopen(poOpenInfo->pszFilename, H5F_ACC_RDONLY, H5P_DEFAULT);
-
+    hid_t hHDF5;
+#ifdef ENABLE_UFFD
+    cpl_uffd_context * pCtx = nullptr;
+    HDF5_UFFD_MAP(poOpenInfo->pszFilename, hHDF5, pCtx);
+#else
+    hHDF5 = H5Fopen(poOpenInfo->pszFilename, H5F_ACC_RDONLY, H5P_DEFAULT);
+#endif
     if( hHDF5 < 0 )
         return nullptr;
 
@@ -486,6 +499,9 @@ GDALDataset *BAGDataset::Open( GDALOpenInfo *poOpenInfo )
     {
         if( hBagRoot >= 0 )
             H5Gclose(hBagRoot);
+#ifdef ENABLE_UFFD
+        HDF5_UFFD_UNMAP(pCtx);
+#endif
         H5Fclose(hHDF5);
         return nullptr;
     }
@@ -495,6 +511,9 @@ GDALDataset *BAGDataset::Open( GDALOpenInfo *poOpenInfo )
     BAGDataset *const poDS = new BAGDataset();
 
     poDS->hHDF5 = hHDF5;
+#ifdef ENABLE_UFFD
+    poDS->pCtx = pCtx;
+#endif
 
     // Extract version as metadata.
     CPLString osVersion;
@@ -590,23 +609,24 @@ void BAGDataset::LoadMetadata()
     const hid_t datatype = H5Dget_type(hMDDS);
     const hid_t dataspace = H5Dget_space(hMDDS);
     const hid_t native = H5Tget_native_type(datatype, H5T_DIR_ASCEND);
-    hsize_t dims[3] = {
-        static_cast<hsize_t>(0),
-        static_cast<hsize_t>(0),
+
+    const int n_dims = H5Sget_simple_extent_ndims(dataspace);
+    hsize_t dims[1] = {
         static_cast<hsize_t>(0)
     };
-    hsize_t maxdims[3] = {
-        static_cast<hsize_t>(0),
-        static_cast<hsize_t>(0),
+    hsize_t maxdims[1] = {
         static_cast<hsize_t>(0)
     };
 
-    H5Sget_simple_extent_dims(dataspace, dims, maxdims);
+    if( n_dims == 1 )
+    {
+        H5Sget_simple_extent_dims(dataspace, dims, maxdims);
 
-    pszXMLMetadata =
-        static_cast<char *>(CPLCalloc(static_cast<int>(dims[0] + 1), 1));
+        pszXMLMetadata =
+            static_cast<char *>(CPLCalloc(static_cast<int>(dims[0] + 1), 1));
 
-    H5Dread(hMDDS, native, H5S_ALL, dataspace, H5P_DEFAULT, pszXMLMetadata);
+        H5Dread(hMDDS, native, H5S_ALL, dataspace, H5P_DEFAULT, pszXMLMetadata);
+    }
 
     H5Tclose(native);
     H5Sclose(dataspace);
@@ -666,7 +686,11 @@ void BAGDataset::LoadMetadata()
     CPLXMLNode *const psDateTime = CPLSearchXMLNode(psRoot, "=dateTime");
     if( psDateTime != nullptr )
     {
-        const char *pszDateTimeValue = CPLGetXMLValue(psDateTime, nullptr, "");
+        const char *pszDateTimeValue =
+            psDateTime->psChild &&
+            psDateTime->psChild->eType == CXT_Element ?
+                CPLGetXMLValue(psDateTime->psChild, nullptr, nullptr):
+                CPLGetXMLValue(psDateTime, nullptr, nullptr);
         if( pszDateTimeValue )
             SetMetadataItem("BAG_DATETIME", pszDateTimeValue);
     }
@@ -856,6 +880,13 @@ void GDALRegister_BAG()
     poDriver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     poDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "Bathymetry Attributed Grid");
     poDriver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_bag.html");
+#ifdef ENABLE_UFFD
+    if( CPLIsUserFaultMappingSupported() )
+    {
+        poDriver->SetMetadataItem( GDAL_DCAP_VIRTUALIO, "YES" );
+    }
+#endif
+
     poDriver->pfnOpen = BAGDataset::Open;
     poDriver->pfnIdentify = BAGDataset::Identify;
 

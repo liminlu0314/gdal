@@ -173,6 +173,10 @@ def VSIFReadL(*args):
     """VSIFReadL(unsigned int nMembSize, unsigned int nMembCount, VSILFILE fp) -> unsigned int"""
     return _gdal.VSIFReadL(*args)
 
+def VSIGetMemFileBuffer_unsafe(*args):
+    """VSIGetMemFileBuffer_unsafe(char const * utf8_path)"""
+    return _gdal.VSIGetMemFileBuffer_unsafe(*args)
+
 
 def _is_str_or_unicode(o):
     return isinstance(o, (str, type(u'')))
@@ -1510,6 +1514,10 @@ def VSIFWriteL(*args):
 def VSICurlClearCache(*args):
     """VSICurlClearCache()"""
     return _gdal.VSICurlClearCache(*args)
+
+def VSICurlPartialClearCache(*args):
+    """VSICurlPartialClearCache(char const * utf8_path)"""
+    return _gdal.VSICurlPartialClearCache(*args)
 
 def ParseCommandLine(*args):
     """ParseCommandLine(char const * utf8_path) -> char **"""

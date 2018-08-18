@@ -50,19 +50,20 @@ class OGRWFS3Dataset final: public GDALDataset
         friend class OGRWFS3Layer;
 
         CPLString                              m_osRootURL;
+        CPLString                              m_osUserPwd;
         int                                    m_nPageSize = 10;
         std::vector<std::unique_ptr<OGRLayer>> m_apoLayers;
         bool                                   m_bAPIDocLoaded = false;
         CPLJSONDocument                        m_oAPIDoc;
 
-        static bool                    Download(
+        bool                    Download(
             const CPLString& osURL,
             const char* pszAccept,
             CPLString& osResult,
             CPLString& osContentType,
             CPLStringList* paosHeaders = nullptr );
 
-        static bool                    DownloadJSon(
+        bool                    DownloadJSon(
             const CPLString& osURL,
             CPLJSONDocument& oDoc,
             const char* pszAccept = "application/geo+json, application/json",
@@ -102,7 +103,6 @@ class OGRWFS3Layer final: public OGRLayer
         std::set<CPLString> m_aoSetQueriableAttributes;
 
         void            EstablishFeatureDefn();
-        bool            EstablishFeatureDefnFromAPIDoc();
         OGRFeature     *GetNextRawFeature();
         CPLString       AddFilters(const CPLString& osURL);
         CPLString       BuildFilter(swq_expr_node* poNode);
@@ -171,6 +171,11 @@ bool OGRWFS3Dataset::Download(
 #endif
     char** papszOptions = CSLSetNameValue(nullptr,
             "HEADERS", (CPLString("Accept: ") + pszAccept).c_str());
+    if( !m_osUserPwd.empty() )
+    {
+        papszOptions = CSLSetNameValue(papszOptions,
+                                       "USERPWD", m_osUserPwd.c_str());
+    }
     CPLHTTPResult* psResult = CPLHTTPFetch(osURL, papszOptions);
     CSLDestroy(papszOptions);
     if( !psResult )
@@ -305,16 +310,18 @@ const CPLJSONDocument& OGRWFS3Dataset::GetAPIDoc()
 
 bool OGRWFS3Dataset::Open(GDALOpenInfo* poOpenInfo)
 {
-    m_osRootURL = 
+    m_osRootURL =
         CSLFetchNameValueDef(poOpenInfo->papszOpenOptions, "URL",
             poOpenInfo->pszFilename + strlen("WFS3:"));
     m_nPageSize = atoi( CSLFetchNameValueDef(poOpenInfo->papszOpenOptions,
                             "PAGE_SIZE",CPLSPrintf("%d", m_nPageSize)) );
+    m_osUserPwd =
+        CSLFetchNameValueDef(poOpenInfo->papszOpenOptions, "USERPWD", "");
     CPLString osResult;
     CPLString osContentType;
     // FIXME: json would be preferable in first position, but
     // http://www.pvretano.com/cubewerx/cubeserv/default/wfs/3.0.0/foundation doesn't like it
-    if( !Download(m_osRootURL,
+    if( !Download(m_osRootURL + "/collections",
             "text/xml, application/json",
             osResult, osContentType) )
         return false;
@@ -348,7 +355,7 @@ bool OGRWFS3Dataset::Open(GDALOpenInfo* poOpenInfo)
                 continue;
             CPLString osTitle( oCollection.GetString("title") );
             CPLString osDescription( oCollection.GetString("description") );
-            CPLJSONArray oBBOX = oCollection.GetArray("extent/bbox");
+            CPLJSONArray oBBOX = oCollection.GetArray("extent/spatial");
             CPLJSONArray oLinks = oCollection.GetArray("links");
             CPLJSONArray oCRS = oCollection.GetArray("crs");
             m_apoLayers.push_back( std::unique_ptr<OGRWFS3Layer>( new
@@ -482,8 +489,8 @@ OGRWFS3Layer::OGRWFS3Layer(OGRWFS3Dataset* poDS,
         poSRS->Release();
     }
 
-    m_osURL = m_poDS->m_osRootURL + "/" + osName; // FIXME
-    m_osPath = "/" + osName; // FIXME
+    m_osURL = m_poDS->m_osRootURL + "/collections/" + osName + "/items"; // FIXME
+    m_osPath = "/collections/" + osName + "/items"; // FIXME
 
     OGRWFS3Layer::ResetReading();
 }
@@ -542,66 +549,6 @@ OGRFeatureDefn* OGRWFS3Layer::GetLayerDefn()
     return m_poFeatureDefn;
 }
 
-
-/************************************************************************/
-/*                  EstablishFeatureDefnFromAPIDoc()                    */
-/************************************************************************/
-
-bool OGRWFS3Layer::EstablishFeatureDefnFromAPIDoc()
-{
-    CPLJSONDocument oDoc = m_poDS->GetAPIDoc();
-    if( oDoc.GetRoot().GetString("openapi").empty() )
-        return false;
-
-    CPLJSONObject oSchema = oDoc.GetRoot().GetObj("paths")
-            .GetObj(m_osPath + "/{id}")
-            .GetObj("get/responses/200/content")
-            .GetObj("application/geo+json")
-            .GetObj("schema");
-    if( !oSchema.IsValid() )
-        return false;
-    CPLString osRef = oSchema.GetString("$ref");
-    if( !osRef.empty() && osRef.find("#/") == 0 )
-    {
-        oSchema = oDoc.GetRoot().GetObj(osRef.substr(2));
-    }
-    CPLJSONObject oProperties = oSchema.GetObj("properties/properties/properties");
-    if( !oProperties.IsValid() )
-        return false;
-    for( const auto& oProp : oProperties.GetChildren() )
-    {
-        if( oProp.GetType() != CPLJSONObject::Type::Object )
-            continue;
-        OGRFieldDefn oFieldDefn(oProp.GetName().c_str(), OFTString);
-        CPLString osType = oProp.GetString("type");
-        CPLString osFormat = oProp.GetString("format");
-        if( osType == "string" && osFormat == "date" )
-            oFieldDefn.SetType(OFTDate);
-        else if( osType == "string" && osFormat == "date-time" )
-            oFieldDefn.SetType(OFTDateTime);
-        else if( osType == "number" )
-        {
-            oFieldDefn.SetType(OFTReal);
-            if( osFormat == "float" )
-                oFieldDefn.SetSubType(OFSTFloat32);
-        }
-        else if( osType == "integer" )
-        {
-            if( osFormat == "int64" )
-                oFieldDefn.SetType(OFTInteger64);
-            else
-                oFieldDefn.SetType(OFTInteger);
-        }
-        else if( osType == "boolean" )
-        {
-            oFieldDefn.SetType(OFTInteger);
-            oFieldDefn.SetSubType(OFSTBoolean);
-        }
-        m_poFeatureDefn->AddFieldDefn(&oFieldDefn);
-    }
-    return true;
-}
-
 /************************************************************************/
 /*                        EstablishFeatureDefn()                        */
 /************************************************************************/
@@ -611,14 +558,9 @@ void OGRWFS3Layer::EstablishFeatureDefn()
     CPLAssert(!m_bFeatureDefnEstablished);
     m_bFeatureDefnEstablished = true;
 
-    if( EstablishFeatureDefnFromAPIDoc() )
-        return;
-
     CPLJSONDocument oDoc;
     CPLString osURL(m_osURL);
-    // FIXME
-    // Explicit count is needed for http://www.pvretano.com/cubewerx/cubeserv/default/wfs/3.0.0/foundation/ otherwise full collection is returned
-    osURL = CPLURLAddKVP(osURL, "count",
+    osURL = CPLURLAddKVP(osURL, "limit",
                             CPLSPrintf("%d", m_poDS->m_nPageSize));
     if( !m_poDS->DownloadJSon(osURL, oDoc) )
         return;
@@ -655,7 +597,7 @@ void OGRWFS3Layer::ResetReading()
     m_osGetURL = m_osURL;
     if( m_poDS->m_nPageSize > 0 )
     {
-        m_osGetURL = CPLURLAddKVP(m_osGetURL, "count",
+        m_osGetURL = CPLURLAddKVP(m_osGetURL, "limit",
                             CPLSPrintf("%d", m_poDS->m_nPageSize));
     }
     m_osGetURL = AddFilters(m_osGetURL);
@@ -700,7 +642,7 @@ OGRFeature* OGRWFS3Layer::GetNextRawFeature()
     OGRFeature* poSrcFeature = nullptr;
     while( true )
     {
-        if( m_poUnderlyingDS.get() == nullptr )
+        if( m_poUnderlyingLayer == nullptr )
         {
             if( m_osGetURL.empty() )
                 return nullptr;
@@ -753,7 +695,8 @@ OGRFeature* OGRWFS3Layer::GetNextRawFeature()
                             continue;
                         }
                         if( oLink.GetString("rel") == "next" &&
-                            oLink.GetString("type") == "application/geo+json" )
+                            (oLink.GetString("type") == "application/geo+json" ||
+                             oLink.GetString("type") == "application/json") )
                         {
                             m_osGetURL = oLink.GetString("href");
                             break;
@@ -784,22 +727,6 @@ OGRFeature* OGRWFS3Layer::GetNextRawFeature()
                         }
                     }
                 }
-
-#ifndef REMOVE_HACK
-                if( m_osGetURL.empty() )
-                {
-                    m_osGetURL = m_osURL;
-                    if( m_poDS->m_nPageSize > 0 )
-                    {
-                        m_osGetURL = CPLURLAddKVP(m_osGetURL, "count",
-                                            CPLSPrintf("%d", m_poDS->m_nPageSize));
-                    }
-                    m_osGetURL = CPLURLAddKVP(m_osGetURL, "startIndex",
-                        CPLSPrintf(CPL_FRMT_GIB,
-                            m_nFID + m_poUnderlyingLayer->GetFeatureCount() - 1));
-                    m_osGetURL = AddFilters(m_osGetURL);
-                }
-#endif
             }
         }
 
@@ -1066,6 +993,9 @@ void OGRWFS3Layer::GetQueriableAttributes()
 OGRErr OGRWFS3Layer::SetAttributeFilter( const char *pszQuery )
 
 {
+    if( !m_bFeatureDefnEstablished )
+        EstablishFeatureDefn();
+
     OGRErr eErr = OGRLayer::SetAttributeFilter(pszQuery);
 
     m_osAttributeFilter.clear();
@@ -1137,6 +1067,8 @@ void RegisterOGRWFS3()
         "description='URL to the WFS server endpoint' required='true'/>"
 "  <Option name='PAGE_SIZE' type='int' "
         "description='Maximum number of features to retrieve in a single request'/>"
+"  <Option name='USERPWD' type='string' "
+        "description='Basic authentication as username:password'/>"
 "</OpenOptionList>" );
 
     poDriver->pfnIdentify = OGRWFS3DriverIdentify;

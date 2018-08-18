@@ -285,7 +285,8 @@ def run_all(dirlist, run_as_external=False):
             if not filename.endswith('.py'):
                 continue
 
-            module = filename.rstrip('.py')
+            # Do not use rstrip here since 'test_ogr2ogr_py.py'.rstrip('.py') returns 'test_ogr2ogr_'
+            module = filename[0:-len('.py')]
             try:
                 wd = os.getcwd()
                 os.chdir(dir_name)
@@ -1564,6 +1565,12 @@ def filesystem_supports_sparse_files(path):
 
     if ret.find('fat32') != -1:
         post_reason('File system does not support sparse files')
+        return False
+
+    if ret.find('wslfs') != -1 or \
+       ret.find('0x53464846') != -1: # wslfs for older stat versions
+        post_reason('Windows Subsystem for Linux FS is at the time of ' +
+                    'writing not known to support sparse files')
         return False
 
     # Add here any missing filesystem supporting sparse files

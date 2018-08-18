@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <map>
 #include <new>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -2591,7 +2592,8 @@ GDALOpen( const char * pszFilename, GDALAccess eAccess )
  * through logical or operator.
  * <ul>
  * <li>Driver kind: GDAL_OF_RASTER for raster drivers, GDAL_OF_VECTOR for vector
- *     drivers.  If none of the value is specified, both kinds are implied.</li>
+ *     drivers, GDAL_OF_GNM for Geographic Network Model drivers.
+ *     If none of the value is specified, all kinds are implied.</li>
  * <li>Access mode: GDAL_OF_READONLY (exclusive)or GDAL_OF_UPDATE.</li>
  * <li>Shared mode: GDAL_OF_SHARED. If set, it allows the sharing of GDALDataset
  * handles for a dataset with other callers that have set GDAL_OF_SHARED.
@@ -2695,22 +2697,51 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
     oOpenInfo.papszAllowedDrivers = papszAllowedDrivers;
 
     // Prevent infinite recursion.
+    struct AntiRecursionStruct
     {
-        int *pnRecCount =
-            static_cast<int *>(CPLGetTLS(CTLS_GDALDATASET_REC_PROTECT_MAP));
-        if( pnRecCount == nullptr )
+        struct DatasetContext
         {
-            pnRecCount = static_cast<int *>(CPLMalloc(sizeof(int)));
-            *pnRecCount = 0;
-            CPLSetTLS(CTLS_GDALDATASET_REC_PROTECT_MAP, pnRecCount, TRUE);
-        }
-        if( *pnRecCount == 100 )
-        {
-            CPLError(CE_Failure, CPLE_AppDefined,
-                     "GDALOpen() called with too many recursion levels");
-            return nullptr;
-        }
-        (*pnRecCount)++;
+            std::string osFilename;
+            int         nOpenFlags;
+            int         nSizeAllowedDrivers;
+
+            DatasetContext(const std::string& osFilenameIn,
+                           int nOpenFlagsIn,
+                           int nSizeAllowedDriversIn) :
+                osFilename(osFilenameIn),
+                nOpenFlags(nOpenFlagsIn),
+                nSizeAllowedDrivers(nSizeAllowedDriversIn) {}
+        };
+
+        struct DatasetContextCompare {
+            bool operator() (const DatasetContext& lhs, const DatasetContext& rhs) const {
+                return lhs.osFilename < rhs.osFilename ||
+                       (lhs.osFilename == rhs.osFilename &&
+                        (lhs.nOpenFlags < rhs.nOpenFlags ||
+                         (lhs.nOpenFlags == rhs.nOpenFlags &&
+                          lhs.nSizeAllowedDrivers < rhs.nSizeAllowedDrivers)));
+            }
+        };
+
+        std::set<DatasetContext, DatasetContextCompare> aosDatasetNamesWithFlags{};
+        int nRecLevel = 0;
+    };
+    static thread_local AntiRecursionStruct sAntiRecursion;
+    if( sAntiRecursion.nRecLevel == 100 )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined,
+                    "GDALOpen() called with too many recursion levels");
+        return nullptr;
+    }
+
+    auto dsCtxt = AntiRecursionStruct::DatasetContext(
+        std::string(pszFilename), nOpenFlags, CSLCount(papszAllowedDrivers));
+    if( sAntiRecursion.aosDatasetNamesWithFlags.find(dsCtxt) !=
+                sAntiRecursion.aosDatasetNamesWithFlags.end() )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined,
+                    "GDALOpen() called on %s recursively", pszFilename);
+        return nullptr;
     }
 
     // Remove leading @ if present.
@@ -2751,6 +2782,11 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
             (nOpenFlags & GDAL_OF_RASTER) == 0 &&
             poDriver->GetMetadataItem(GDAL_DCAP_VECTOR) == nullptr )
             continue;
+        if( poDriver->pfnOpen == nullptr &&
+            poDriver->pfnOpenWithDriverArg == nullptr )
+        {
+            continue;
+        }
 
         // Remove general OVERVIEW_LEVEL open options from list before passing
         // it to the driver, if it isn't a driver specific option already.
@@ -2786,6 +2822,9 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
         CPLErrorReset();
 #endif
 
+        sAntiRecursion.nRecLevel ++;
+        sAntiRecursion.aosDatasetNamesWithFlags.insert(dsCtxt);
+
         GDALDataset *poDS = nullptr;
         if ( poDriver->pfnOpen != nullptr )
         {
@@ -2799,13 +2838,9 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
         {
             poDS = poDriver->pfnOpenWithDriverArg(poDriver, &oOpenInfo);
         }
-        else
-        {
-            CSLDestroy(papszTmpOpenOptions);
-            CSLDestroy(papszTmpOpenOptionsToValidate);
-            oOpenInfo.papszOpenOptions = papszOpenOptionsCleaned;
-            continue;
-        }
+
+        sAntiRecursion.nRecLevel --;
+        sAntiRecursion.aosDatasetNamesWithFlags.erase(dsCtxt);
 
         CSLDestroy(papszTmpOpenOptions);
         CSLDestroy(papszTmpOpenOptionsToValidate);
@@ -2843,11 +2878,6 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
 
                 poDS->AddToDatasetOpenList();
             }
-
-            int *pnRecCount =
-                static_cast<int *>(CPLGetTLS(CTLS_GDALDATASET_REC_PROTECT_MAP));
-            if( pnRecCount )
-                (*pnRecCount)--;
 
             if( nOpenFlags & GDAL_OF_SHARED )
             {
@@ -2909,11 +2939,6 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
 #else
         if( CPLGetLastErrorNo() != 0 && CPLGetLastErrorType() > CE_Warning)
         {
-            int *pnRecCount =
-                static_cast<int *>(CPLGetTLS(CTLS_GDALDATASET_REC_PROTECT_MAP));
-            if( pnRecCount )
-                (*pnRecCount)--;
-
             CSLDestroy(papszOpenOptionsCleaned);
             return nullptr;
         }
@@ -2945,11 +2970,6 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
             }
         }
     }
-
-    int *pnRecCount =
-        static_cast<int *>(CPLGetTLS(CTLS_GDALDATASET_REC_PROTECT_MAP));
-    if( pnRecCount )
-        (*pnRecCount)--;
 
     return nullptr;
 }
@@ -4180,10 +4200,10 @@ int GDALDataset::GetSummaryRefCount() const
  @since GDAL 2.0
 */
 
-OGRLayer *GDALDataset::ICreateLayer( const char * /* pszName */,
-                                     OGRSpatialReference * /* poSpatialRef */,
-                                     OGRwkbGeometryType /* eGType */,
-                                     char ** /* papszOptions */ )
+OGRLayer *GDALDataset::ICreateLayer( CPL_UNUSED const char * pszName,
+                                     CPL_UNUSED OGRSpatialReference * poSpatialRef,
+                                     CPL_UNUSED OGRwkbGeometryType eGType,
+                                     CPL_UNUSED char ** papszOptions )
 
 {
     CPLError(CE_Failure, CPLE_NotSupported,

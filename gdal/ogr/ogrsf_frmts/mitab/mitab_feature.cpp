@@ -40,6 +40,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <utility>
 
 #include "cpl_conv.h"
 #include "cpl_error.h"
@@ -700,6 +701,16 @@ int TABFeature::UpdateMBR(TABMAPFile *poMapFile /*=NULL*/)
         {
             poMapFile->Coordsys2Int(oEnv.MinX, oEnv.MinY, m_nXMin, m_nYMin);
             poMapFile->Coordsys2Int(oEnv.MaxX, oEnv.MaxY, m_nXMax, m_nYMax);
+            // Coordsy2Int can transform a min value to a max one and vice
+            // versa.
+            if( m_nXMin > m_nXMax )
+            {
+                std::swap(m_nXMin, m_nXMax);
+            }
+            if( m_nYMin > m_nYMax )
+            {
+                std::swap(m_nYMin, m_nYMax);
+            }
         }
 
         return 0;
@@ -3599,8 +3610,6 @@ OGRLinearRing *TABRegion::GetRingRef(int nRequestedRingIndex)
  **********************************************************************/
 GBool TABRegion::IsInteriorRing(int nRequestedRingIndex)
 {
-    OGRLinearRing   *poRing = nullptr;
-
     OGRGeometry *poGeom = GetGeometryRef();
 
     if (poGeom && (wkbFlatten(poGeom->getGeometryType()) == wkbPolygon ||
@@ -3627,7 +3636,7 @@ GBool TABRegion::IsInteriorRing(int nRequestedRingIndex)
          * Loop through polygons until we find the requested ring.
          *------------------------------------------------------------*/
         iCurRing = 0;
-        for(int iPoly=0; poRing == nullptr && iPoly < numOGRPolygons; iPoly++)
+        for(int iPoly=0; iPoly < numOGRPolygons; iPoly++)
         {
             OGRPolygon* poPolygon = nullptr;
             if (poMultiPolygon)

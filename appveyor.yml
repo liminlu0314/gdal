@@ -109,7 +109,7 @@ install:
       $env:NMAKE_LOCAL+="POPPLER_0_20_OR_LATER = YES`n"
       $env:NMAKE_LOCAL+="POPPLER_0_23_OR_LATER = YES`n"
       $env:NMAKE_LOCAL+="POPPLER_BASE_STREAM_HAS_TWO_ARGS = YES`n"
-      $env:NMAKE_LOCAL+="POPPLER_LIBS = `$(SDK_LIB)\poppler.lib `$(SDK_LIB)\freetype2411.lib advapi32.lib gdi32.lib`n"
+      $env:NMAKE_LOCAL+="POPPLER_LIBS = `$(SDK_LIB)\poppler.lib `$(SDK_LIB)\freetype.lib `$(SDK_LIB)\harfbuzz.lib advapi32.lib gdi32.lib`n"
       $env:NMAKE_LOCAL+="OPENJPEG_ENABLED = YES`n"
       $env:NMAKE_LOCAL+="OPENJPEG_CFLAGS = -I`$(SDK_INC)\openjpeg-2.1`n"
       $env:NMAKE_LOCAL+="OPENJPEG_LIB = `$(SDK_LIB)\openjp2.lib`n"
@@ -135,6 +135,9 @@ install:
       cd $env:APPVEYOR_BUILD_FOLDER\gdal\swig\python
       exec { python setup.py build }
       exec { python setup.py install }
+      cd $env:APPVEYOR_BUILD_FOLDER\gdal\swig\csharp
+      exec { nmake /f makefile.vc interface}
+      exec { nmake /f makefile.vc all $env:WIN64_ARG}
       cd $env:APPVEYOR_BUILD_FOLDER\autotest\cpp
       exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG }
 
@@ -153,6 +156,8 @@ test_script:
       exec { nmake /f makefile.vc check MSVC_VER=$env:MSVC_VER $env:WIN64_ARG }
       cd $env:APPVEYOR_BUILD_FOLDER\autotest
       exec { python run_all.py }
+      cd $env:APPVEYOR_BUILD_FOLDER\gdal\swig\csharp
+      exec { nmake /f makefile.vc test}
 
 deploy: off
 

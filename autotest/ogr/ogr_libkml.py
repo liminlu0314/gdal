@@ -2104,7 +2104,7 @@ def ogr_libkml_read_placemark_with_kml_prefix():
     return 'success'
 
 ###############################################################################
-# Test reading KML with dumplicated folder name
+# Test reading KML with duplicated folder name
 
 
 def ogr_libkml_read_duplicate_folder_name():
@@ -2190,6 +2190,45 @@ def ogr_libkml_read_kml_with_space_content_in_coordinates():
     wkt = 'LINESTRING EMPTY'
 
     if ogrtest.check_feature_geometry(feat, wkt):
+        return 'fail'
+
+    return 'success'
+
+###############################################################################
+# Test reading a layer refering several schema (github #826)
+
+
+def ogr_libkml_read_several_schema():
+
+    if not ogrtest.have_read_libkml:
+        return 'skip'
+
+    ds = ogr.Open('data/several_schema_in_layer.kml')
+    lyr = ds.GetLayer(0)
+    feat = lyr.GetNextFeature()
+    if feat['fieldA'] != 'fieldAValue' or feat['common'] != 'commonAValue':
+        gdaltest.post_reason('fail')
+        feat.DumpReadable()
+        return 'fail'
+
+    feat = lyr.GetNextFeature()
+    if feat['fieldB'] != 'fieldBValue' or feat['common'] != 'commonBValue':
+        gdaltest.post_reason('fail')
+        feat.DumpReadable()
+        return 'fail'
+
+    ds = ogr.Open('data/several_schema_outside_layer.kml')
+    lyr = ds.GetLayer(0)
+    feat = lyr.GetNextFeature()
+    if feat['fieldA'] != 'fieldAValue' or feat['common'] != 'commonAValue':
+        gdaltest.post_reason('fail')
+        feat.DumpReadable()
+        return 'fail'
+
+    feat = lyr.GetNextFeature()
+    if feat['fieldB'] != 'fieldBValue' or feat['common'] != 'commonBValue':
+        gdaltest.post_reason('fail')
+        feat.DumpReadable()
         return 'fail'
 
     return 'success'
@@ -2301,6 +2340,7 @@ gdaltest_list = [
     ogr_libkml_read_placemark_in_root_and_subfolder,
     ogr_libkml_read_tab_separated_coord_triplet,
     ogr_libkml_read_kml_with_space_content_in_coordinates,
+    ogr_libkml_read_several_schema,
     ogr_libkml_cleanup]
 
 if __name__ == '__main__':

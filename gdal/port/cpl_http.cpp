@@ -496,10 +496,13 @@ char** CPLHTTPGetOptionsFromEnv()
 /*                      CPLHTTPGetNewRetryDelay()                       */
 /************************************************************************/
 
-double CPLHTTPGetNewRetryDelay(int response_code, double dfOldDelay)
+double CPLHTTPGetNewRetryDelay(int response_code, double dfOldDelay,
+                               const char* pszErrBuf)
 {
-    if( response_code == 429 ||
-            (response_code>= 502 && response_code <= 504) )
+    if( response_code == 429 || response_code == 500 ||
+        (response_code >= 502 && response_code <= 504) ||
+        // S3 sends some client timeout errors as 400 Client Error
+        (response_code == 400 && pszErrBuf && strstr(pszErrBuf, "RequestTimeout")) )
     {
         // Use an exponential backoff factor of 2 plus some random jitter
         // We don't care about cryptographic quality randomness, hence:
@@ -649,6 +652,12 @@ CPLHTTPResult *CPLHTTPFetchEx( const char *pszURL, CSLConstList papszOptions,
         {
             osURL += "&CUSTOMREQUEST=";
             osURL += pszCustomRequest;
+        }
+        const char* pszUserPwd = CSLFetchNameValue( papszOptions, "USERPWD" );
+        if( pszUserPwd != nullptr )
+        {
+            osURL += "&USERPWD=";
+            osURL += pszUserPwd;
         }
         const char* pszPost = CSLFetchNameValue( papszOptions, "POSTFIELDS" );
         if( pszPost != nullptr ) // Hack: We append post content to filename.
@@ -966,7 +975,8 @@ CPLHTTPResult *CPLHTTPFetchEx( const char *pszURL, CSLConstList papszOptions,
             {
                 const double dfNewRetryDelay = CPLHTTPGetNewRetryDelay(
                     static_cast<int>(response_code),
-                    dfRetryDelaySecs);
+                    dfRetryDelaySecs,
+                    reinterpret_cast<const char*>(psResult->pabyData));
                 if( dfNewRetryDelay > 0 && nRetryCount < nMaxRetries )
                 {
                     CPLError(CE_Warning, CPLE_AppDefined,

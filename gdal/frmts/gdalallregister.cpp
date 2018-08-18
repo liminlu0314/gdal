@@ -550,6 +550,11 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_RDA();
 #endif
 
+#ifdef FRMT_eeda
+    GDALRegister_EEDAI();
+    GDALRegister_EEDA();
+#endif
+
 #ifdef FRMT_null
     GDALRegister_NULL();
 #endif
@@ -574,6 +579,10 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_ENVI();
     GDALRegister_EHdr();
     GDALRegister_ISCE();
+#endif
+
+#ifdef FRMT_sigdem
+    GDALRegister_SIGDEM();
 #endif
 
 #ifdef FRMT_wcs

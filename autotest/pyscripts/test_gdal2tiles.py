@@ -45,10 +45,16 @@ def test_gdal2tiles_py_simple():
     if script_path is None:
         return 'skip'
 
+    shutil.copy('../gdrivers/data/small_world.tif', 'tmp/out_gdal2tiles_smallworld.tif')
+
+    os.chdir('tmp')
     test_py_scripts.run_py_script(
         script_path,
         'gdal2tiles',
-        '-q ../gdrivers/data/small_world.tif tmp/out_gdal2tiles_smallworld')
+        '-q out_gdal2tiles_smallworld.tif')
+    os.chdir('..')
+
+    os.unlink('tmp/out_gdal2tiles_smallworld.tif')
 
     ds = gdal.Open('tmp/out_gdal2tiles_smallworld/0/0/0.png')
 
@@ -76,10 +82,6 @@ def test_gdal2tiles_py_zoom_option():
     if script_path is None:
         return 'skip'
 
-    # Issue with multiprocessing in the chroot
-    if os.environ.get('BUILD_NAME', '') == 'trusty_32bit':
-        return 'skip'
-
     shutil.rmtree('tmp/out_gdal2tiles_smallworld', ignore_errors=True)
 
     # Because of multiprocessing, run as external process, to avoid issues with
@@ -88,7 +90,7 @@ def test_gdal2tiles_py_zoom_option():
     test_py_scripts.run_py_script_as_external_script(
         script_path,
         'gdal2tiles',
-        '-q --processes=2 -z 0-1 ../gdrivers/data/small_world.tif tmp/out_gdal2tiles_smallworld')
+        '-q --force-kml --processes=2 -z 0-1 ../gdrivers/data/small_world.tif tmp/out_gdal2tiles_smallworld')
 
     ds = gdal.Open('tmp/out_gdal2tiles_smallworld/1/0/0.png')
 
@@ -101,6 +103,11 @@ def test_gdal2tiles_py_zoom_option():
             return 'fail'
 
     ds = None
+
+    ds = gdal.Open('tmp/out_gdal2tiles_smallworld/doc.kml')
+    if ds is None:
+        gdaltest.post_reason('did not get kml')
+        return 'fail'
 
     return 'success'
 
@@ -272,6 +279,11 @@ def _test_utf8(should_raise_unicode=False,
                 'Should not display a warning message about LC_CTYPE variable')
             return 'fail'
 
+    try:
+        shutil.rmtree(out_folder)
+    except OSError:
+        pass
+
     return 'success'
 
 
@@ -287,6 +299,47 @@ def test_gdal2tiles_py_cleanup():
     return 'success'
 
 
+def test_exclude_transparent_tiles():
+    script_path = test_py_scripts.get_py_script('gdal2tiles')
+    if script_path is None:
+        return 'skip'
+
+    output_folder = 'tmp/test_exclude_transparent_tiles'
+    os.makedirs(output_folder)
+
+    try:
+        test_py_scripts.run_py_script_as_external_script(
+            script_path,
+            'gdal2tiles',
+            '-x -z 14-16 data/test_gdal2tiles_exclude_transparent.tif %s' % output_folder)
+
+        # First row totally transparent - no tiles
+        tiles_folder = os.path.join(output_folder, '15', '21898')
+        dir_files = os.listdir(tiles_folder)
+        if dir_files:
+            gdaltest.post_reason('Generated empty tiles for row 21898: %s' % dir_files)
+            return 'fail'
+
+        # Second row - only 2 non-transparent tiles
+        tiles_folder = os.path.join(output_folder, '15', '21899')
+        dir_files = sorted(os.listdir(tiles_folder))
+        if ['22704.png', '22705.png'] != dir_files:
+            gdaltest.post_reason('Generated empty tiles for row 21899: %s' % dir_files)
+            return 'fail'
+
+        # Third row - only 1 non-transparent tile
+        tiles_folder = os.path.join(output_folder, '15', '21900')
+        dir_files = os.listdir(tiles_folder)
+        if ['22705.png'] != dir_files:
+            gdaltest.post_reason('Generated empty tiles for row 21900: %s' % dir_files)
+            return 'fail'
+
+        return 'success'
+
+    finally:
+        shutil.rmtree(output_folder)
+
+
 gdaltest_list = [
     test_gdal2tiles_py_simple,
     test_gdal2tiles_py_zoom_option,
@@ -298,6 +351,7 @@ gdaltest_list = [
     test_python2_does_not_give_warning_if_bad_lc_ctype_and_all_ascii_chars,
     test_python2_does_not_give_warning_if_bad_lc_ctype_and_non_ascii_chars_in_folder,
     test_gdal2tiles_py_cleanup,
+    test_exclude_transparent_tiles,
 ]
 
 

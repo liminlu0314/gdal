@@ -289,6 +289,32 @@ cd $CUR_DIR
 zip -r $OUT/gdal_sdts_fuzzer_seed_corpus.zip gdal_sdts.tar >/dev/null
 rm gdal_sdts.tar
 
+
+echo "Building ers_fuzzer_seed_corpus.zip"
+rm -f $OUT/ers_fuzzer_seed_corpus.zip
+CUR_DIR=$PWD
+cd  $(dirname $0)/../../autotest/gdrivers/data
+{
+    printf "FUZZER_FRIENDLY_ARCHIVE\\n"
+    printf "***NEWFILE***:%s\\n" "test.ers"
+    cat srtm.ers
+    printf "***NEWFILE***:%s\\n" "test"
+    cat srtm
+} > $CUR_DIR/srtm.tar
+
+{
+    printf "FUZZER_FRIENDLY_ARCHIVE\\n"
+    printf "***NEWFILE***:%s\\n" "test.ers"
+    cat ers_dem.ers
+    printf "***NEWFILE***:%s\\n" "test"
+    cat ers_dem
+} > $CUR_DIR/ers_dem.tar
+
+cd $CUR_DIR
+zip -r $OUT/ers_fuzzer_seed_corpus.zip srtm.tar ers_dem.tar >/dev/null
+rm srtm.tar ers_dem.tar
+
+
 echo "Building ogr_sdts_fuzzer_seed_corpus.zip"
 rm -f $OUT/ogr_sdts_fuzzer_seed_corpus.zip
 CUR_DIR=$PWD

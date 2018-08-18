@@ -36,7 +36,7 @@ CPL_CVSID("$Id$")
 /************************************************************************/
 
 OGRMSSQLSpatialDataSource::OGRMSSQLSpatialDataSource() :
-    bDSUpdate(FALSE)
+    bDSUpdate(false)
 {
     pszName = nullptr;
     pszCatalog = nullptr;
@@ -529,7 +529,7 @@ OGRLayer * OGRMSSQLSpatialDataSource::ICreateLayer( const char * pszLayerName,
 int OGRMSSQLSpatialDataSource::OpenTable( const char *pszSchemaName, const char *pszTableName,
                                           const char *pszGeomCol, int nCoordDimension,
                                           int nSRID, const char *pszSRText, OGRwkbGeometryType eType,
-                                          CPL_UNUSED int bUpdate )
+                                          bool bUpdate )
 {
 /* -------------------------------------------------------------------- */
 /*      Create the layer object.                                        */
@@ -541,6 +541,7 @@ int OGRMSSQLSpatialDataSource::OpenTable( const char *pszSchemaName, const char 
         delete poLayer;
         return FALSE;
     }
+    poLayer->SetUpdate(bUpdate);
 
     if (bUseCopy)
         poLayer->SetUseCopy(nBCPSize);
@@ -595,7 +596,7 @@ int OGRMSSQLSpatialDataSource::ParseValue(char** pszValue, char* pszSource, cons
 /*                                Open()                                */
 /************************************************************************/
 
-int OGRMSSQLSpatialDataSource::Open( const char * pszNewName, int bUpdate,
+int OGRMSSQLSpatialDataSource::Open( const char * pszNewName, bool bUpdate,
                              int bTestOpen )
 
 {
@@ -940,7 +941,7 @@ int OGRMSSQLSpatialDataSource::Open( const char * pszNewName, int bUpdate,
         if (papszSRIds != nullptr)
             nSRId = atoi(papszSRIds[iTable]);
         else
-            nSRId = -1;
+            nSRId = 0;
 
         if (papszCoordDimensions != nullptr)
             nCoordDimension = atoi(papszCoordDimensions[iTable]);

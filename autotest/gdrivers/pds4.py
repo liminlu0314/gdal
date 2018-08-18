@@ -95,7 +95,7 @@ def pds4_1():
     PARAMETER["false_easting",0],
     PARAMETER["false_northing",0]]
 """
-    gt = (-59280.0, 60.0, 0.0, 3751320.0, 0.0, -60.0)
+    gt = (-59250.0, 60.0, 0.0, 3751290.0, 0.0, -60.0)
 
     tst = gdaltest.GDALTest('PDS4', 'byte_pds4.xml', 1, 4672)
     return tst.testOpen(check_prj=srs, check_gt=gt)
@@ -305,7 +305,7 @@ def pds4_9():
     ds = None
 
     filename = '/vsimem/out.xml'
-    # Test copy of all specialConstants and overide noData
+    # Test copy of all specialConstants and override noData
     for frmt in ['RAW', 'GEOTIFF']:
         with hide_substitution_warnings_error_handler():
             gdal.Translate(filename, 'data/byte_pds4.xml', format='PDS4',

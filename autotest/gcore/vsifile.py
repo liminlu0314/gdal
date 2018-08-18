@@ -687,9 +687,35 @@ def vsifile_15():
     fp = gdal.VSIFOpenL('/vsigzip/data/corrupted_z_buf_error.gz', 'rb')
     if fp is None:
         return 'fail'
+    file_len = 0
     while not gdal.VSIFEofL(fp):
         with gdaltest.error_handler():
-            gdal.VSIFReadL(1, 4, fp)
+            file_len += len(gdal.VSIFReadL(1, 4, fp))
+    if file_len != 6469:
+        gdaltest.post_reason('fail')
+        return 'fail'
+
+    with gdaltest.error_handler():
+        file_len += len(gdal.VSIFReadL(1, 4, fp))
+    if file_len != 6469:
+        gdaltest.post_reason('fail')
+        return 'fail'
+
+    with gdaltest.error_handler():
+        if gdal.VSIFSeekL(fp, 0, 2) == 0:
+            gdaltest.post_reason('fail')
+            return 'fail'
+
+    if gdal.VSIFSeekL(fp, 0, 0) != 0:
+        gdaltest.post_reason('fail')
+        return 'fail'
+
+    len_read = len(gdal.VSIFReadL(1, file_len, fp))
+    if len_read != file_len:
+        gdaltest.post_reason('fail')
+        print(len_read)
+        return 'fail'
+
     gdal.VSIFCloseL(fp)
 
     return 'success'
@@ -771,6 +797,85 @@ def vsifile_20():
 
     return 'fail'
 
+###############################################################################
+# Test gdal.VSIGetMemFileBuffer_unsafe() and gdal.VSIFWriteL() reading buffers
+
+
+def vsifile_21():
+
+    filename = '/vsimem/read.tif'
+    filename_write = '/vsimem/write.tif'
+    data = 'This is some data'
+
+    vsifile = gdal.VSIFOpenL(filename, 'wb')
+    if gdal.VSIFWriteL(data, 1, len(data), vsifile) != len(data):
+        return 'fail'
+    gdal.VSIFCloseL(vsifile)
+
+    vsifile = gdal.VSIFOpenL(filename, 'rb')
+    gdal.VSIFSeekL(vsifile, 0, 2)
+    vsilen = gdal.VSIFTellL(vsifile)
+    gdal.VSIFSeekL(vsifile, 0, 0)
+    data_read = gdal.VSIFReadL(1, vsilen, vsifile)
+    data_mem = gdal.VSIGetMemFileBuffer_unsafe(filename)
+    if data_read != data_mem[:]:
+        return 'fail'
+    gdal.VSIFCloseL(vsifile)
+    vsifile_write = gdal.VSIFOpenL(filename_write, 'wb')
+    if gdal.VSIFWriteL(data_mem, 1, len(data_mem), vsifile_write) != len(data_mem):
+        return 'fail'
+    gdal.VSIFCloseL(vsifile_write)
+    gdal.Unlink(filename)
+    gdal.Unlink(filename_write)
+    with gdaltest.error_handler():
+        data3 = gdal.VSIGetMemFileBuffer_unsafe(filename)
+        if data3 != None:
+            return 'fail'
+
+    return 'success'
+
+###############################################################################
+# Test bugfix for https://github.com/OSGeo/gdal/issues/675
+
+
+def vsitar_bug_675():
+
+    content = gdal.ReadDir('/vsitar/data/tar_with_star_base256_fields.tar')
+    if len(content) != 1:
+        print(content)
+        return 'fail'
+    return 'success'
+
+###############################################################################
+# Test multithreaded compression
+
+
+def vsigzip_multi_thread():
+
+    with gdaltest.config_options({'GDAL_NUM_THREADS': 'ALL_CPUS',
+                                  'CPL_VSIL_DEFLATE_CHUNK_SIZE': '32K'}):
+        f = gdal.VSIFOpenL('/vsigzip//vsimem/vsigzip_multi_thread.gz', 'wb')
+        for i in range(100000):
+            gdal.VSIFWriteL('hello', 1, 5, f)
+        gdal.VSIFCloseL(f)
+
+    f = gdal.VSIFOpenL('/vsigzip//vsimem/vsigzip_multi_thread.gz', 'rb')
+    data = gdal.VSIFReadL(100000, 5, f).decode('ascii')
+    gdal.VSIFCloseL(f)
+
+    gdal.Unlink('/vsimem/vsigzip_multi_thread.gz')
+
+    if data != 'hello' * 100000:
+        gdaltest.post_reason('fail')
+
+        for i in range(10000):
+            if data[i*5:i*5+5] != 'hello':
+                print(i*5, data[i*5:i*5+5], data[i*5-5:i*5+5-5])
+                break
+
+        return 'fail'
+
+    return 'success'
 
 gdaltest_list = [vsifile_1,
                  vsifile_2,
@@ -791,7 +896,10 @@ gdaltest_list = [vsifile_1,
                  vsifile_17,
                  vsifile_18,
                  vsifile_19,
-                 vsifile_20]
+                 vsifile_20,
+                 vsifile_21,
+                 vsitar_bug_675,
+                 vsigzip_multi_thread]
 
 if __name__ == '__main__':
 

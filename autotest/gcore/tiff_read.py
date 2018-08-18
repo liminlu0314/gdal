@@ -2442,6 +2442,17 @@ def tiff_read_md12():
     except OSError:
         pass
 
+    # Test not valid DIMAP product [https://github.com/OSGeo/gdal/issues/431]
+    shutil.copy('../gdrivers/data/dimap2/IMG_foo_R2C1.TIF', 'tmp/IMG_foo_temp.TIF')
+    shutil.copy('../gdrivers/data/dimap2/DIM_foo.XML', 'tmp/DIM_foo.XML')
+    shutil.copy('../gdrivers/data/dimap2/RPC_foo.XML', 'tmp/RPC_foo.XML')
+    ds = gdal.Open('tmp/IMG_foo_temp.TIF', gdal.GA_ReadOnly)
+    filelist = ds.GetFileList()
+
+    if len(filelist) > 1:
+        gdaltest.post_reason('did not get expected file list.')
+        return 'fail'
+
     return 'success'
 
 ###############################################################################
@@ -3757,6 +3768,52 @@ def tiff_read_1bit_2bands():
     return 'success'
 
 ###############################################################################
+# Test LERC compression
+
+
+def tiff_read_lerc():
+
+    md = gdal.GetDriverByName('GTiff').GetMetadata()
+    if md['DMD_CREATIONOPTIONLIST'].find('LERC') == -1:
+        return 'skip'
+
+    ut = gdaltest.GDALTest('GTiff', 'byte_lerc.tif', 1, 4672)
+    return ut.testOpen()
+
+###############################################################################
+
+
+def tiff_read_overview_of_external_mask():
+
+    filename = '/vsimem/tiff_read_overview_of_external_mask.tif'
+    gdal.Translate(filename, 'data/byte.tif', options='-b 1 -mask 1')
+    ds = gdal.Open(filename, gdal.GA_Update)
+    ds.BuildOverviews('CUBIC', overviewlist=[2])
+    ds = None
+    ds = gdal.Open(filename + '.msk', gdal.GA_Update)
+    ds.BuildOverviews('NEAREST', overviewlist=[2])
+    ds = None
+    ds = gdal.Open(filename)
+    cs1 = ds.GetRasterBand(1).GetOverview(0).GetMaskBand().Checksum()
+    cs2 = ds.GetRasterBand(1).GetMaskBand().GetOverview(0).Checksum()
+    flags1 = ds.GetRasterBand(1).GetOverview(0).GetMaskFlags()
+    ds = None
+
+    gdal.Unlink(filename)
+    gdal.Unlink(filename + '.msk')
+
+    if cs1 != cs2:
+        gdaltest.post_reason('fail')
+        print(cs1, cs2)
+        return 'fail'
+    if flags1 != gdal.GMF_PER_DATASET:
+        gdaltest.post_reason('fail')
+        print(flags1)
+        return 'fail'
+
+    return 'success'
+
+###############################################################################
 
 
 for item in init_list:
@@ -3885,6 +3942,8 @@ gdaltest_list.append((tiff_read_zstd))
 gdaltest_list.append((tiff_read_zstd_corrupted))
 gdaltest_list.append((tiff_read_zstd_corrupted2))
 gdaltest_list.append((tiff_read_1bit_2bands))
+gdaltest_list.append((tiff_read_lerc))
+gdaltest_list.append((tiff_read_overview_of_external_mask))
 
 gdaltest_list.append((tiff_read_online_1))
 gdaltest_list.append((tiff_read_online_2))

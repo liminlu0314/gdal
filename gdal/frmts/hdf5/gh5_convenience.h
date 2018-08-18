@@ -36,7 +36,10 @@
 #pragma warning(push)
 #pragma warning(disable : 4005) // warning C4005: '_HDF5USEDLL_' : macro redefinition
 #endif
+
 #include "hdf5.h"
+#include "H5LTpublic.h"
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif

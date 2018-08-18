@@ -98,7 +98,6 @@ class GDALGeoPackageDataset final : public OGRSQLiteBaseDataSource, public GDALG
     GUInt32             m_nUserVersion;
     OGRGeoPackageTableLayer** m_papoLayers;
     int                 m_nLayers;
-    bool                m_bUtf8;
     void                CheckUnknownExtensions(bool bCheckRasterTable = false);
 #ifdef ENABLE_GPKG_OGR_CONTENTS
     bool                m_bHasGPKGOGRContents;
@@ -273,7 +272,6 @@ class GDALGeoPackageDataset final : public OGRSQLiteBaseDataSource, public GDALG
         int                 GetSrsId( const OGRSpatialReference& oSRS );
         const char*         GetSrsName( const OGRSpatialReference& oSRS );
         OGRSpatialReference* GetSpatialRef( int iSrsId );
-        bool                GetUTF8() { return m_bUtf8; }
         OGRErr              CreateExtensionsTableIfNecessary();
         bool                HasExtensionsTable();
         OGRErr              CreateGDALAspatialExtension();
@@ -549,7 +547,7 @@ class OGRGeoPackageTableLayer final : public OGRGeoPackageLayer
     void                SetOGRFeatureCountTriggersEnabled(bool b)
                                     { m_bOGRFeatureCountTriggersEnabled = b; }
 
-    void                DisableFeatureCount( bool bInMemoryOnly = false );
+    void                DisableFeatureCount();
 #endif
 
     /************************************************************************/
@@ -567,6 +565,7 @@ class OGRGeoPackageTableLayer final : public OGRGeoPackageLayer
     OGRErr              FeatureBindUpdateParameters( OGRFeature *poFeature, sqlite3_stmt *poStmt );
     OGRErr              FeatureBindInsertParameters( OGRFeature *poFeature, sqlite3_stmt *poStmt, bool bAddFID, bool bBindUnsetFields );
     OGRErr              FeatureBindParameters( OGRFeature *poFeature, sqlite3_stmt *poStmt, int *pnColCount, bool bAddFID, bool bBindUnsetFields );
+    void                UpdateContentsToNullExtent();
 
     void                CheckUnknownExtensions();
     bool                CreateGeometryExtensionIfNecessary(const OGRGeometry* poGeom);

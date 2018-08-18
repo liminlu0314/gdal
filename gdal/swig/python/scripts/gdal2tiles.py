@@ -43,6 +43,7 @@ import math
 from multiprocessing import Pipe, Pool, Process, Manager
 import os
 import tempfile
+import threading
 import shutil
 import sys
 from uuid import uuid4
@@ -65,6 +66,8 @@ __version__ = "$Id$"
 resampling_list = ('average', 'near', 'bilinear', 'cubic', 'cubicspline', 'lanczos', 'antialias')
 profile_list = ('mercator', 'geodetic', 'raster')
 webviewer_list = ('all', 'google', 'openlayers', 'leaflet', 'none')
+
+threadLocal = threading.local()
 
 # =============================================================================
 # =============================================================================
@@ -292,9 +295,8 @@ class GlobalMercator(object):
 
         for i in range(MAXZOOMLEVEL):
             if pixelSize > self.Resolution(i):
-                if i != -1:
-                    return i - 1
-                return 0    # We don't want to scale up
+                return max(0, i - 1)    # We don't want to scale up
+        return MAXZOOMLEVEL - 1
 
     def GoogleTile(self, tx, ty, zoom):
         "Converts TMS tile coordinates to Google Tile coordinates"
@@ -397,9 +399,8 @@ class GlobalGeodetic(object):
 
         for i in range(MAXZOOMLEVEL):
             if pixelSize > self.Resolution(i):
-                if i != 0:
-                    return i - 1
-                return 0    # We don't want to scale up
+                return max(0, i - 1)    # We don't want to scale up
+        return MAXZOOMLEVEL - 1
 
     def TileBounds(self, tx, ty, zoom):
         "Returns bounds of the given tile"
@@ -771,14 +772,12 @@ def update_no_data_values(warped_vrt_dataset, nodata_values, options=None):
     Takes an array of NODATA values and forces them on the WarpedVRT file dataset passed
     """
     # TODO: gbataille - Seems that I forgot tests there
-    if nodata_values != []:
-        temp_file = gettempfilename('-gdal2tiles.vrt')
-        warped_vrt_dataset.GetDriver().CreateCopy(temp_file, warped_vrt_dataset)
-        with open(temp_file, 'r') as f:
-            vrt_string = f.read()
+    assert nodata_values != []
 
-        vrt_string = add_gdal_warp_options_to_string(
-            vrt_string, {"INIT_DEST": "NO_DATA", "UNIFIED_SRC_NODATA": "YES"})
+    vrt_string = warped_vrt_dataset.GetMetadata("xml:VRT")[0]
+
+    vrt_string = add_gdal_warp_options_to_string(
+        vrt_string, {"INIT_DEST": "NO_DATA", "UNIFIED_SRC_NODATA": "YES"})
 
 # TODO: gbataille - check the need for this replacement. Seems to work without
 #         # replace BandMapping tag for NODATA bands....
@@ -794,25 +793,19 @@ def update_no_data_values(warped_vrt_dataset, nodata_values, options=None):
 # </BandMapping>
 #                 """ % ((i+1), (i+1), nodata_values[i], nodata_values[i]))
 
-        # save the corrected VRT
-        with open(temp_file, 'w') as f:
-            f.write(vrt_string)
+    corrected_dataset = gdal.Open(vrt_string)
 
-        corrected_dataset = gdal.Open(temp_file)
-        os.unlink(temp_file)
+    # set NODATA_VALUE metadata
+    corrected_dataset.SetMetadataItem(
+        'NODATA_VALUES', ' '.join([str(i) for i in nodata_values]))
 
-        # set NODATA_VALUE metadata
-        corrected_dataset.SetMetadataItem(
-            'NODATA_VALUES', ' '.join([str(i) for i in nodata_values]))
+    if options and options.verbose:
+        print("Modified warping result saved into 'tiles1.vrt'")
 
-        if options and options.verbose:
-            print("Modified warping result saved into 'tiles1.vrt'")
-            # TODO: gbataille - test replacing that with a gdal write of the dataset (more
-            # accurately what's used, even if should be the same
-            with open("tiles1.vrt", "w") as f:
-                f.write(vrt_string)
+        with open("tiles1.vrt", "w") as f:
+            f.write(corrected_dataset.GetMetadata("xml:VRT")[0])
 
-        return corrected_dataset
+    return corrected_dataset
 
 
 def add_alpha_band_to_string_vrt(vrt_string):
@@ -872,23 +865,18 @@ def update_alpha_value_for_non_alpha_inputs(warped_vrt_dataset, options=None):
     not been forced by options
     """
     if warped_vrt_dataset.RasterCount in [1, 3]:
-        tempfilename = gettempfilename('-gdal2tiles.vrt')
-        warped_vrt_dataset.GetDriver().CreateCopy(tempfilename, warped_vrt_dataset)
-        with open(tempfilename) as f:
-            orig_data = f.read()
-        alpha_data = add_alpha_band_to_string_vrt(orig_data)
-        with open(tempfilename, 'w') as f:
-            f.write(alpha_data)
 
-        warped_vrt_dataset = gdal.Open(tempfilename)
-        os.unlink(tempfilename)
+        vrt_string = warped_vrt_dataset.GetMetadata("xml:VRT")[0]
+
+        vrt_string = add_alpha_band_to_string_vrt(vrt_string)
+
+        warped_vrt_dataset = gdal.Open(vrt_string)
 
         if options and options.verbose:
             print("Modified -dstalpha warping result saved into 'tiles1.vrt'")
-            # TODO: gbataille - test replacing that with a gdal write of the dataset (more
-            # accurately what's used, even if should be the same
+
             with open("tiles1.vrt", "w") as f:
-                f.write(alpha_data)
+                f.write(warped_vrt_dataset.GetMetadata("xml:VRT")[0])
 
     return warped_vrt_dataset
 
@@ -904,26 +892,7 @@ def nb_data_bands(dataset):
         return dataset.RasterCount - 1
     return dataset.RasterCount
 
-
-def gettempfilename(suffix):
-    """Returns a temporary filename"""
-    if '_' in os.environ:
-        # tempfile.mktemp() crashes on some Wine versions (the one of Ubuntu 12.04 particularly)
-        if os.environ['_'].find('wine') >= 0:
-            tmpdir = '.'
-            if 'TMP' in os.environ:
-                tmpdir = os.environ['TMP']
-            import time
-            import random
-            random.seed(time.time())
-            random_part = 'file%d' % random.randint(0, 1000000000)
-            return os.path.join(tmpdir, random_part + suffix)
-
-    return tempfile.mktemp(suffix)
-
-
 def create_base_tile(tile_job_info, tile_detail, queue=None):
-    gdal.AllRegister()
 
     dataBandsCount = tile_job_info.nb_data_bands
     output = tile_job_info.output_file_path
@@ -932,7 +901,14 @@ def create_base_tile(tile_job_info, tile_detail, queue=None):
     options = tile_job_info.options
 
     tilebands = dataBandsCount + 1
-    ds = gdal.Open(tile_job_info.src_file, gdal.GA_ReadOnly)
+
+    cached_ds = getattr(threadLocal, 'cached_ds', None)
+    if cached_ds and cached_ds.GetDescription() == tile_job_info.src_file:
+        ds = cached_ds
+    else:
+        ds = gdal.Open(tile_job_info.src_file, gdal.GA_ReadOnly)
+        threadLocal.cached_ds = ds
+
     mem_drv = gdal.GetDriverByName('MEM')
     out_drv = gdal.GetDriverByName(tile_job_info.tile_driver)
     alphaband = ds.GetRasterBand(1).GetMaskBand()
@@ -965,9 +941,14 @@ def create_base_tile(tile_job_info, tile_detail, queue=None):
     # We scale down the query to the tilesize by supplied algorithm.
 
     if rxsize != 0 and rysize != 0 and wxsize != 0 and wysize != 0:
+        alpha = alphaband.ReadRaster(rx, ry, rxsize, rysize, wxsize, wysize)
+
+        # Detect totally transparent tile and skip its creation
+        if tile_job_info.exclude_transparent and len(alpha) == alpha.count('\x00'.encode('ascii')):
+            return
+
         data = ds.ReadRaster(rx, ry, rxsize, rysize, wxsize, wysize,
                              band_list=list(range(1, dataBandsCount + 1)))
-        alpha = alphaband.ReadRaster(rx, ry, rxsize, rysize, wxsize, wysize)
 
     # The tile in memory is a transparent file by default. Write pixel values into it if
     # any
@@ -996,9 +977,6 @@ def create_base_tile(tile_job_info, tile_detail, queue=None):
                                 tilefilename=tilefilename)
             del dsquery
 
-    # Force freeing the memory to make sure the C++ destructor is called and the memory as well as
-    # the file locks are released
-    del ds
     del data
 
     if options.resampling != 'antialias':
@@ -1014,7 +992,7 @@ def create_base_tile(tile_job_info, tile_detail, queue=None):
             with open(kmlfilename, 'wb') as f:
                 f.write(generate_kml(
                     tx, ty, tz, tile_job_info.tile_extension, tile_job_info.tile_size,
-                    tile_job_info.tile_swne, tile_job_info.options
+                    get_tile_swne(tile_job_info, options), tile_job_info.options
                 ).encode('utf-8'))
 
     if queue:
@@ -1088,9 +1066,13 @@ def create_overview_tiles(tile_job_info, output_folder, options):
                     for x in range(2 * tx, 2 * tx + 2):
                         minx, miny, maxx, maxy = tile_job_info.tminmax[tz + 1]
                         if x >= minx and x <= maxx and y >= miny and y <= maxy:
+                            base_tile_path = os.path.join(output_folder, str(tz + 1), str(x),
+                                                          "%s.%s" % (y, tile_job_info.tile_extension))
+                            if not os.path.isfile(base_tile_path):
+                                continue
+
                             dsquerytile = gdal.Open(
-                                os.path.join(output_folder, str(tz + 1), str(x),
-                                             "%s.%s" % (y, tile_job_info.tile_extension)),
+                                base_tile_path,
                                 gdal.GA_ReadOnly)
                             if (ty == 0 and y == 1) or (ty != 0 and (y % (2 * ty)) != 0):
                                 tileposy = 0
@@ -1111,28 +1093,29 @@ def create_overview_tiles(tile_job_info, output_folder, options):
                                 band_list=list(range(1, tilebands + 1)))
                             children.append([x, y, tz + 1])
 
-                scale_query_to_tile(dsquery, dstile, tile_driver, options,
-                                    tilefilename=tilefilename)
-                # Write a copy of tile to png/jpg
-                if options.resampling != 'antialias':
+                if children:
+                    scale_query_to_tile(dsquery, dstile, tile_driver, options,
+                                        tilefilename=tilefilename)
                     # Write a copy of tile to png/jpg
-                    out_driver.CreateCopy(tilefilename, dstile, strict=0)
+                    if options.resampling != 'antialias':
+                        # Write a copy of tile to png/jpg
+                        out_driver.CreateCopy(tilefilename, dstile, strict=0)
 
-                if options.verbose:
-                    print("\tbuild from zoom", tz + 1,
-                          " tiles:", (2 * tx, 2 * ty), (2 * tx + 1, 2 * ty),
-                          (2 * tx, 2 * ty + 1), (2 * tx + 1, 2 * ty + 1))
+                    if options.verbose:
+                        print("\tbuild from zoom", tz + 1,
+                              " tiles:", (2 * tx, 2 * ty), (2 * tx + 1, 2 * ty),
+                              (2 * tx, 2 * ty + 1), (2 * tx + 1, 2 * ty + 1))
 
-                # Create a KML file for this tile.
-                if tile_job_info.kml:
-                    with open(os.path.join(
-                        output_folder,
-                        '%d/%d/%d.kml' % (tz, tx, ty)
-                    ), 'wb') as f:
-                        f.write(generate_kml(
-                            tx, ty, tz, tile_job_info.tile_extension, tile_job_info.tile_size,
-                            get_tile_swne(tile_job_info, options), options, children
-                        ).encode('utf-8'))
+                    # Create a KML file for this tile.
+                    if tile_job_info.kml:
+                        with open(os.path.join(
+                            output_folder,
+                            '%d/%d/%d.kml' % (tz, tx, ty)
+                        ), 'wb') as f:
+                            f.write(generate_kml(
+                                tx, ty, tz, tile_job_info.tile_extension, tile_job_info.tile_size,
+                                get_tile_swne(tile_job_info, options), options, children
+                            ).encode('utf-8'))
 
                 if not options.verbose and not options.quiet:
                     progress_bar.log_progress()
@@ -1165,6 +1148,9 @@ def optparse_init():
     p.add_option("-v", "--verbose",
                  action="store_true", dest="verbose",
                  help="Print status messages to stdout")
+    p.add_option("-x", "--exclude",
+                 action="store_true", dest="exclude_transparent",
+                 help="Exclude transparent tiles from result tileset")
     p.add_option("-q", "--quiet",
                  action="store_true", dest="quiet",
                  help="Disable messages and status to stdout")
@@ -1228,7 +1214,8 @@ def process_args(argv):
     if len(args) == 2:
         output_folder = args[1]
     else:
-        output_folder = os.path.basename(input_file)
+        # Directory with input filename without extension in actual directory
+        output_folder = os.path.splitext(os.path.basename(input_file))[0]
 
     options = options_post_processing(options, input_file, output_folder)
 
@@ -1248,15 +1235,7 @@ def options_post_processing(options, input_file, output_folder):
         options.url += os.path.basename(out_path) + '/'
 
     # Supported options
-    if options.resampling == 'average':
-        try:
-            if gdal.RegenerateOverview:
-                pass
-        except AttributeError:
-            exit_with_error("'average' resampling algorithm is not available.",
-                            "Please use -r 'near' argument or upgrade to newer version of GDAL.")
-
-    elif options.resampling == 'antialias' and not numpy_available:
+    if options.resampling == 'antialias' and not numpy_available:
         exit_with_error("'antialias' resampling algorithm is not available.",
                         "Install PIL (Python Imaging Library) and numpy.")
 
@@ -1335,6 +1314,7 @@ class TileJobInfo(object):
     ominy = 0
     is_epsg_4326 = False
     options = None
+    exclude_transparent = False
 
     def __init__(self, **kwargs):
         for key in kwargs:
@@ -1914,6 +1894,7 @@ class GDAL2Tiles(object):
             ominy=self.ominy,
             is_epsg_4326=self.isepsg4326,
             options=self.options,
+            exclude_transparent=self.options.exclude_transparent,
         )
 
         return conf, tile_details
@@ -2875,6 +2856,9 @@ def single_threaded_tiling(input_file, output_folder, options):
         if not options.verbose and not options.quiet:
             progress_bar.log_progress()
 
+    if getattr(threadLocal, 'cached_ds', None):
+        del threadLocal.cached_ds
+
     create_overview_tiles(conf, output_folder, options)
 
     shutil.rmtree(os.path.dirname(conf.src_file))
@@ -2882,6 +2866,10 @@ def single_threaded_tiling(input_file, output_folder, options):
 
 def multi_threaded_tiling(input_file, output_folder, options):
     nb_processes = options.nb_processes or 1
+
+    # Make sure that all processes do not consume more than GDAL_CACHEMAX
+    os.environ['GDAL_CACHEMAX'] = '%d' % int(gdal.GetCacheMax() / nb_processes)
+
     (conf_receiver, conf_sender) = Pipe(False)
 
     if options.verbose:
@@ -2904,7 +2892,6 @@ def multi_threaded_tiling(input_file, output_folder, options):
     pool = Pool(processes=nb_processes)
     # TODO: gbataille - check the confs for which each element is an array... one useless level?
     # TODO: gbataille - assign an ID to each job for print in verbose mode "ReadRaster Extent ..."
-    # TODO: gbataille - check memory footprint and time on big image. are they opened x times
     for tile_detail in tile_details:
         pool.apply_async(create_base_tile, (conf, tile_detail), {"queue": queue})
 

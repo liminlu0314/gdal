@@ -33,12 +33,20 @@
 #include "gdalwarper.h"
 #include "ogrgeopackageutility.h"
 #include "ogrsqliteutility.h"
+#include "vrt/vrtdataset.h"
 
 #include <cstdlib>
 
 #include <algorithm>
 
 CPL_CVSID("$Id$")
+
+// Keep in sync prototype of those 2 functions between gdalopeninfo.cpp,
+// ogrsqlitedatasource.cpp and ogrgeopackagedatasource.cpp
+void GDALOpenInfoDeclareFileNotToOpen(const char* pszFilename,
+                                       const GByte* pabyHeader,
+                                       int nHeaderBytes);
+void GDALOpenInfoUnDeclareFileNotToOpen(const char* pszFilename);
 
 /************************************************************************/
 /*                             Tiling schemes                           */
@@ -494,7 +502,6 @@ GDALGeoPackageDataset::GDALGeoPackageDataset() :
     m_nUserVersion(GPKG_1_2_VERSION),
     m_papoLayers(nullptr),
     m_nLayers(0),
-    m_bUtf8(false),
 #ifdef ENABLE_GPKG_OGR_CONTENTS
     m_bHasGPKGOGRContents(false),
 #endif
@@ -814,6 +821,14 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
         }
         pabyHeader = abyHeaderLetMeHerePlease;
     }
+    else if( poOpenInfo->pabyHeader &&
+            STARTS_WITH((const char*)poOpenInfo->pabyHeader, "SQLite format 3") )
+    {
+        m_bCallUndeclareFileNotToOpen = true;
+        GDALOpenInfoDeclareFileNotToOpen(osFilename,
+                                    poOpenInfo->pabyHeader,
+                                    poOpenInfo->nHeaderBytes);
+    }
 
     bUpdate = poOpenInfo->eAccess == GA_Update;
     eAccess = poOpenInfo->eAccess; /* hum annoying duplication */
@@ -913,6 +928,14 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
     else if( pabyHeader != nullptr )
 #endif
     {
+        if (poOpenInfo->fpL )
+        {
+            // See above comment about -wal locking for the importance of
+            // closing that file, prior to calling sqlite3_open()
+            VSIFCloseL(poOpenInfo->fpL);
+            poOpenInfo->fpL = nullptr;
+        }
+
         /* See if we can open the SQLite database */
         if( !OpenOrCreateDB(bUpdate
                         ? SQLITE_OPEN_READWRITE
@@ -966,9 +989,6 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
                   m_pszFilename);
         return FALSE;
     }
-
-    /* OGR UTF-8 capability, we'll advertise UTF-8 support if we have it */
-    m_bUtf8 = ( OGRERR_NONE == PragmaCheck("encoding", "UTF-8", 1) );
 
     /* Check for requirement metadata tables */
     /* Requirement 10: gpkg_spatial_ref_sys must exist */
@@ -3765,8 +3785,8 @@ int GDALGeoPackageDataset::Create( const char * pszFilename,
 
         if( m_bHasDefinition12_063 )
         {
-            CreateExtensionsTableIfNecessary();
-            if( OGRERR_NONE != SQLCommand(hDB,
+            if( OGRERR_NONE != CreateExtensionsTableIfNecessary() ||
+                OGRERR_NONE != SQLCommand(hDB,
                 "INSERT INTO gpkg_extensions "
                 "(table_name, column_name, extension_name, definition, scope) "
                 "VALUES "
@@ -4254,6 +4274,24 @@ bool GDALGeoPackageDataset::CreateTileGriddedTable(char** papszOptions)
 }
 
 /************************************************************************/
+/*                      GetUnderlyingDataset()                          */
+/************************************************************************/
+
+static GDALDataset* GetUnderlyingDataset( GDALDataset* poSrcDS )
+{
+    if( EQUAL(poSrcDS->GetDescription(), "") &&
+        poSrcDS->GetDriver() != nullptr &&
+        poSrcDS->GetDriver() == GDALGetDriverByName("VRT") )
+    {
+        VRTDataset* poVRTDS = cpl::down_cast<VRTDataset*>(poSrcDS);
+        auto poTmpDS = poVRTDS->GetSingleSimpleSource();
+        if( poTmpDS )
+            return poTmpDS;
+    }
+
+    return poSrcDS;
+}
+/************************************************************************/
 /*                            CreateCopy()                              */
 /************************************************************************/
 
@@ -4288,7 +4326,7 @@ GDALDataset* GDALGeoPackageDataset::CreateCopy( const char *pszFilename,
     if( CPLTestBool(CSLFetchNameValueDef(papszOptions, "APPEND_SUBDATASET", "NO")) &&
         CSLFetchNameValue(papszOptions, "RASTER_TABLE") == nullptr )
     {
-        CPLString osBasename(CPLGetBasename(poSrcDS->GetDescription()));
+        CPLString osBasename(CPLGetBasename(GetUnderlyingDataset(poSrcDS)->GetDescription()));
         apszUpdatedOptions.SetNameValue("RASTER_TABLE", osBasename);
     }
 
@@ -5224,19 +5262,23 @@ OGRLayer * GDALGeoPackageDataset::ExecuteSQL( const char *pszSQLCommand,
 
     if( pszDialect == nullptr || !EQUAL(pszDialect, "DEBUG") )
     {
+        // Some SQL commands will influence the feature count behind our
+        // back, so disable it in that case.
 #ifdef ENABLE_GPKG_OGR_CONTENTS
         const bool bInsertOrDelete =
             osSQLCommand.ifind("insert into ") != std::string::npos ||
             osSQLCommand.ifind("delete from ") != std::string::npos;
+        const bool bRollback = osSQLCommand.ifind("rollback ") != std::string::npos;
 #endif
 
         for( int i = 0; i < m_nLayers; i++ )
         {
 #ifdef ENABLE_GPKG_OGR_CONTENTS
-            if( bInsertOrDelete &&
-                osSQLCommand.ifind(m_papoLayers[i]->GetName()) != std::string::npos )
+            if( bRollback ||
+                (bInsertOrDelete &&
+                 osSQLCommand.ifind(m_papoLayers[i]->GetName()) != std::string::npos) )
             {
-                m_papoLayers[i]->DisableFeatureCount(true);
+                m_papoLayers[i]->DisableFeatureCount();
             }
 #endif
             m_papoLayers[i]->SyncToDisk();

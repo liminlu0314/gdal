@@ -3,6 +3,11 @@
 *.obj
 *.so
 *~
+# eclipse ignore
+.project
+.settings
+.pydevproject
+.cproject
 gdal/swig/setup.ini
 gdal/nmake_x86.opt
 gdal/nmake_x64.opt

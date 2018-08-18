@@ -1781,10 +1781,16 @@ OGRGeometry* OGRGeometryFactory::organizePolygons( OGRGeometry **papoPolygons,
                         // iterate over the other points of i.
                         const int nPoints = poLR_i->getNumPoints();
                         int k = 1;  // Used after for.
+                        OGRPoint previousPoint = asPolyEx[i].poAPoint;
                         for( ; k < nPoints; k++ )
                         {
                             OGRPoint point;
                             poLR_i->getPoint(k, &point);
+                            if( point.getX() == previousPoint.getX() &&
+                                point.getY() == previousPoint.getY() )
+                            {
+                                continue;
+                            }
                             if( poLR_j->isPointOnRingBoundary(&point, FALSE) )
                             {
                                 // If it is on the boundary of j, iterate again.
@@ -1801,23 +1807,28 @@ OGRGeometry* OGRGeometryFactory::organizePolygons( OGRGeometry **papoPolygons,
                                 // If it is outside, then i cannot be inside j.
                                 break;
                             }
+                            previousPoint = point;
                         }
                         if( !b_i_inside_j && k == nPoints && nPoints > 2 )
                         {
                             // All points of i are on the boundary of j.
                             // Take a point in the middle of a segment of i and
                             // test it against j.
-                            for( k = 0; k < nPoints - 1; k++ )
+                            poLR_i->getPoint(0, &previousPoint);
+                            for( k = 1; k < nPoints; k++ )
                             {
-                                OGRPoint point1;
-                                OGRPoint point2;
+                                OGRPoint point;
+                                poLR_i->getPoint(k, &point);
+                                if( point.getX() == previousPoint.getX() &&
+                                    point.getY() == previousPoint.getY() )
+                                {
+                                    continue;
+                                }
                                 OGRPoint pointMiddle;
-                                poLR_i->getPoint(k, &point1);
-                                poLR_i->getPoint(k+1, &point2);
-                                pointMiddle.setX((point1.getX() +
-                                                  point2.getX()) / 2);
-                                pointMiddle.setY((point1.getY() +
-                                                  point2.getY()) / 2);
+                                pointMiddle.setX((point.getX() +
+                                                  previousPoint.getX()) / 2);
+                                pointMiddle.setY((point.getY() +
+                                                  previousPoint.getY()) / 2);
                                 if( poLR_j->isPointOnRingBoundary(&pointMiddle,
                                                                   FALSE) )
                                 {
@@ -1838,6 +1849,7 @@ OGRGeometry* OGRGeometryFactory::organizePolygons( OGRGeometry **papoPolygons,
                                     // j.
                                     break;
                                 }
+                                previousPoint = point;
                             }
                         }
                     }
@@ -4155,7 +4167,7 @@ OGRGeometryH OGR_G_ForceToLineString( OGRGeometryH hGeom )
  * (see OGR_GT_GetCollection()) or the reverse. non-linear geometry type to
  * their corresponding linear geometry type (see OGR_GT_GetLinear()), by
  * possibly approximating circular arcs they may contain.  Regarding conversion
- * from linear geometry types to curve geometry types, only "wraping" will be
+ * from linear geometry types to curve geometry types, only "wrapping" will be
  * done. No attempt to retrieve potential circular arcs by de-approximating
  * stroking will be done. For that, OGRGeometry::getCurveGeometry() can be used.
  *
