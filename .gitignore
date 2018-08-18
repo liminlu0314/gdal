@@ -8,3 +8,4 @@ gdal/nmake_x86.opt
 gdal/nmake_x64.opt
 gdal/gdaltest.cpp
 gdal/nmake.opt
+gdal/nmake_me.opt
