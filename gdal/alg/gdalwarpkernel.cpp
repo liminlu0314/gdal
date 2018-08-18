@@ -1137,6 +1137,8 @@ CPLErr GDALWarpKernel::PerformWarp()
         return GWKGeneralCase( this );
 
 #if defined(HAVE_OPENCL)
+	//判断是否设置了使用OpenCL的选项
+	bool bUseOpenCl = CPLFetchBool(papszWarpOptions, "USE_OPENCL", false) || CPLTestBool(CPLGetConfigOption("USE_OPENCL", "FALSE"));
     if( (eWorkingDataType == GDT_Byte
          || eWorkingDataType == GDT_CInt16
          || eWorkingDataType == GDT_UInt16
@@ -1147,7 +1149,7 @@ CPLErr GDALWarpKernel::PerformWarp()
          || eResample == GRA_Cubic
          || eResample == GRA_CubicSpline
          || eResample == GRA_Lanczos) &&
-        CPLFetchBool( papszWarpOptions, "USE_OPENCL", true ) )
+		bUseOpenCl)
     {
         const CPLErr eResult = GWKOpenCLCase( this );
 

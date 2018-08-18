@@ -1,0 +1,48 @@
+<html>
+<head>
+<title>China Geospatial Data Transfer Format (CNSDTF)</title>
+</head>
+
+<body bgcolor="#ffffff">
+
+<h1>China Geospatial Data Transfer Grid Format (CNSDTF-DEM | CNSDTF-RAS)</h1>
+
+(Available for GDAL &gt;= 1.10.0)
+<p>
+Supported for read and write access, including reading of an affine georeferencing transform and some projections. This format is the ASCII interchange format for China Geospatial Data Transfer Grid, and takes the form of an ASCII file.
+<p>
+The NODATA value for the grid read is also preserved when available. 这个NODATA在标准中是没有的，此处自己添加的。
+</p>
+
+<p>
+By default, the datatype returned for CNSDTF datasets by GDAL is autodetected, and set to Float32 for grid with floating point values or Int32 otherwise. 
+</p>
+
+<p>
+When writing floating-point values, the driver uses the "%6.20g" format pattern as a default. You can alternatively specify the number of decimal places with the DECIMAL_PRECISION creation option. For example, DECIMAL_PRECISION=3 will output numbers with 3 decimal places.
+</p>
+
+<h2>Georeferencing</h2>
+
+<p>
+The BLX projection is fixed to WGS84 and georeferencing from BLX is supported in the form of one tiepoint and 
+pixelsize.
+</p>
+
+<h2>Creation Issues</h2>
+
+Creation Options:
+<p>
+
+<ul>
+
+<li> <b>FORCE_RASTER=YES</b>: Set file header data mark. Force use of RASTER (CNSDTF-RAS), default is FALSE(CNSDTF-DEM).
+<li> <b>DECIMAL_PRECISION=3</b>: You can alternatively specify the number of decimal places with the DECIMAL_PRECISION creation option. For example, DECIMAL_PRECISION=3 will output numbers with 3 decimal places.
+</ul>
+</p>
+
+<p>
+NOTE: Implemented as gdal/frmts/cnsdtf/cnsdtfdataset.cpp.
+</p>
+</body>
+</html>

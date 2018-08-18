@@ -74,10 +74,10 @@ GDALMDReaderDigitalGlobe::~GDALMDReaderDigitalGlobe() {}
  */
 bool GDALMDReaderDigitalGlobe::HasRequiredFiles() const
 {
-    if (!m_osIMDSourceFilename.empty())
-        return true;
-    if (!m_osRPBSourceFilename.empty())
-        return true;
+    if (m_osIMDSourceFilename.empty())
+        return false;
+    if (m_osRPBSourceFilename.empty())
+        return false;
 
     // check <isd>
     if(!m_osXMLSourceFilename.empty() &&

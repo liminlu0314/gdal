@@ -89,8 +89,14 @@ typedef enum {
     MDR_KOMPSAT  = 0x00000100,    /**< Kompsat,       METADATATYPE=KARI */
     MDR_EROS     = 0x00000200,    /**< EROS,          METADATATYPE=EROS */
     MDR_ALOS     = 0x00000400,    /**< ALOS,          METADATATYPE=ALOS */
+	MDR_GF		 = 0x00000800,    /**< GaoFen,        METADATATYPE=GaoFen */
+	MDR_TH       = 0x00001000,    /**< TianHui,       METADATATYPE=TianHui */
+	MDR_TS       = 0x00002000,    /**< TripleSat,     METADATATYPE=TripleSat */
+	MDR_ZY02C    = 0x00004000,    /**< ZiYuan02C,     METADATATYPE=ZiYuan02C */
+	MDR_ZY3      = 0x00008000,    /**< ZiYuan3,       METADATATYPE=ZiYuan3 */
     MDR_ANY  = MDR_DG | MDR_GE | MDR_OV | MDR_PLEIADES | MDR_SPOT | MDR_RDK1 |
-               MDR_LS | MDR_RE | MDR_KOMPSAT | MDR_EROS | MDR_ALOS /**< any reader */
+              MDR_LS | MDR_RE | MDR_KOMPSAT | MDR_EROS | MDR_ALOS |
+			  MDR_GF | MDR_TH | MDR_TS | MDR_ZY02C | MDR_ZY3 /**< any reader */
 } MDReaders;
 
 /**
@@ -207,15 +213,15 @@ protected:
 // misc
 CPLString CPLStrip(const CPLString& osString, const char cChar);
 CPLString CPLStripQuotes(const CPLString& osString);
-char** GDALLoadRPBFile( const CPLString& osFilePath );
-char** GDALLoadRPCFile( const CPLString& osFilePath );
-char** GDALLoadIMDFile( const CPLString& osFilePath );
+char CPL_DLL ** GDALLoadRPBFile( const char* osFilePath );
+char CPL_DLL ** GDALLoadRPCFile( const char* osFilePath );
+char CPL_DLL ** GDALLoadIMDFile( const char* osFilePath );
 bool GDALCheckFileHeader(const CPLString& soFilePath,
                                const char * pszTestString,
                                int nBufferSize = 256);
 
-CPLErr GDALWriteRPBFile( const char *pszFilename, char **papszMD );
-CPLErr GDALWriteRPCTXTFile( const char *pszFilename, char **papszMD );
-CPLErr GDALWriteIMDFile( const char *pszFilename, char **papszMD );
+CPLErr CPL_DLL GDALWriteRPBFile( const char *pszFilename, char **papszMD );
+CPLErr CPL_DLL GDALWriteRPCTXTFile( const char *pszFilename, char **papszMD );
+CPLErr CPL_DLL GDALWriteIMDFile( const char *pszFilename, char **papszMD );
 
 #endif //GDAL_MDREADER_H_INCLUDED

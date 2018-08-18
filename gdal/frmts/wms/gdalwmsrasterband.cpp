@@ -30,6 +30,7 @@
  ****************************************************************************/
 
 #include "wmsdriver.h"
+#include "cpl_csv.h"
 
 CPL_CVSID("$Id$")
 
@@ -72,13 +73,72 @@ GDALWMSRasterBand::GDALWMSRasterBand(GDALWMSDataset *parent_dataset, int band,
     eDataType = m_parent_dataset->m_data_type;
     nBlockXSize = m_parent_dataset->m_block_size_x;
     nBlockYSize = m_parent_dataset->m_block_size_y;
+
+	InitTiandituMap();
 }
 
 GDALWMSRasterBand::~GDALWMSRasterBand() {
     while (!m_overviews.empty()) {
         delete m_overviews.back();
         m_overviews.pop_back();
-    }
+	}
+
+	omTianditu.clear(); 
+}
+
+void GDALWMSRasterBand::InitTiandituMap()
+{
+	if(!omTianditu.empty())
+		omTianditu.clear();
+
+	const char* pszFindEva = strstr(m_parent_dataset->m_osXML.c_str(), "layer=eva");
+	const char* pszFindCva = strstr(m_parent_dataset->m_osXML.c_str(), "layer=cva");
+
+	if(pszFindEva == nullptr && pszFindCva == nullptr)
+		return;
+
+	const char *pszFilename = nullptr;
+	if(pszFindEva != nullptr)
+		pszFilename = CSVFilename( "tianditu_eva.csv" );
+	else if(pszFindCva != nullptr)
+		pszFilename = CSVFilename( "tianditu_cva.csv" );
+
+	if( pszFilename == nullptr )
+		return;
+
+	FILE * fp;
+	fp = VSIFOpen( pszFilename, "rb" );
+	if( fp == nullptr )
+	{
+		CPLError( CE_Failure, CPLE_OpenFailed, 
+			"Failed to open %s, %s.", 
+			pszFilename, VSIStrerror( errno ) );
+		return ;
+	}
+
+	const char* pszDATA = CPLGetConfigOption("GDAL_DATA", ".");
+
+	char ** papszRecord = CSVReadParseLine( fp );
+	while(papszRecord != nullptr)
+	{
+		if( papszRecord[0] == nullptr || papszRecord[1] == nullptr ||
+			EQUAL(papszRecord[0],"") || EQUAL(papszRecord[1],""))
+		{
+			CSLDestroy(papszRecord);
+			papszRecord = CSVReadParseLine( fp );
+			continue;
+		}
+
+		CPLString strName = papszRecord[0];
+		CPLString strValue = CPLFormFilename(pszDATA, papszRecord[1], nullptr);
+
+		omTianditu[strName] = strValue;
+		
+		CSLDestroy(papszRecord);
+		papszRecord = CSVReadParseLine( fp );
+	}
+
+	VSIFClose(fp);
  }
 
 // Request for x, y but all blocks between bx0-bx1 and by0-by1 should be read
@@ -644,6 +704,14 @@ CPLErr GDALWMSRasterBand::ReadBlockFromDataset(GDALDataset *ds, int x,
                     GDALColorTable *ct = rb->GetColorTable();
                     if( ct != nullptr )
                     {
+						GDALColorEntry ce0;
+						ct->GetColorEntryAsRGB(0, &ce0);
+						if(ce0.c1 == 255 && ce0.c2 == 255 && ce0.c3 == 255 && ce0.c4 == 0 )//如果ColorTable是:255 255 255 0变成 0 0 0
+						{
+							ce0.c1 = ce0.c2 = ce0.c3 = 0;
+							ct->SetColorEntry(0, &ce0);
+						}
+
                         if (!advise_read)
                         {
                             color_table = new GByte[256 * 4];

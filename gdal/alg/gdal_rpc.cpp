@@ -255,6 +255,15 @@ typedef struct {
     double      adfDEMGeoTransform[6];
     double      adfDEMReverseGeoTransform[6];
 
+	int         nRefineOrder;					//RPC adjustment refine order (must be one of 0 1 2)
+	double		adfRefineTransform[12];			//RPC adjustment refine delta transform 
+	double		adfReverseRefineTransform[12];	//RPC adjustment reverse refine delta transform
+	// order : a0 a1 a2 b0 b1 b2 a3 a4 a5 b3 b4 b5
+	// order :  1  x  y  1  x  y xx yy xy xx yy xy
+	// order 0 a0  0  0 b0  0  0  0  0  0  0  0  0
+	// order 1 a0 a1 a2 b0 b1 b2  0  0  0  0  0  0
+	// order 2 a0 a1 a2 b0 b1 b2 a3 a4 a5 b3 b4 b5
+    
 #ifdef USE_SSE2_OPTIM
     double      adfDoubles[20 * 4 + 1];
      // LINE_NUM_COEFF, LINE_DEN_COEFF, SAMP_NUM_COEFF and then SAMP_DEN_COEFF.
@@ -873,6 +882,16 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
     }
 
 /* -------------------------------------------------------------------- */
+	/*                     RPC Refine transform parameters                  */
+	/* -------------------------------------------------------------------- */
+	memset(psTransform->adfRefineTransform, 0, sizeof(double)*12);
+	memset(psTransform->adfReverseRefineTransform, 0, sizeof(double)*12);
+
+	psTransform->adfRefineTransform[1] = psTransform->adfRefineTransform[5] = 1;
+	psTransform->adfReverseRefineTransform[1] = psTransform->adfReverseRefineTransform[5] = 1;
+	psTransform->nRefineOrder = -1;
+
+/* -------------------------------------------------------------------- */
 /*      Whether to apply vdatum shift                                   */
 /* -------------------------------------------------------------------- */
     psTransform->bApplyDEMVDatumShift =
@@ -996,6 +1015,54 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
         GDALDestroyRPCTransformer(psTransform);
         return nullptr;
     }
+
+	const char *pszRpcRefineOrder = CSLFetchNameValueDef( papszOptions, "RPC_REFINE_ORDER", "0" );
+	const char *pszRpcRefineParam = CSLFetchNameValueDef( papszOptions, "RPC_REFINE_PARAM", "0 0" );
+	if(pszRpcRefineParam != nullptr && pszRpcRefineOrder != nullptr)	//解析RPC像方改正仿射变换参数
+	{
+		int nOrder = (int)CPLAtof(pszRpcRefineOrder);
+		if(nOrder >=0 || nOrder < 3)
+		{
+			psTransform->nRefineOrder = nOrder;
+			char** papszTokens = CSLTokenizeString2( pszRpcRefineParam, " ", 0 );
+			int nTokens = CSLCount(papszTokens);
+			if(nOrder == 0 && nTokens == 2)			//must be 2
+			{
+				psTransform->adfRefineTransform[0] += atof(papszTokens[0]);
+				psTransform->adfRefineTransform[3] += atof(papszTokens[1]);
+			}
+			else if(nOrder == 1 && nTokens == 6)	//must be 6
+			{
+				for (int i=0; i<6; i++)
+					psTransform->adfRefineTransform[i] += atof(papszTokens[i]);
+			}
+			else if(nOrder == 2 && nTokens == 12)	//must be 12
+			{
+				//string order = a0 a1 a2 a3 a4 a5 b0 b1 b2 b3 b4 b5
+				//params order = a0 a1 a2 b0 b1 b2 a3 a4 a5 b3 b4 b5
+				psTransform->adfRefineTransform[0] += atof(papszTokens[0]);
+				psTransform->adfRefineTransform[1] += atof(papszTokens[1]);
+				psTransform->adfRefineTransform[2] += atof(papszTokens[2]);
+				psTransform->adfRefineTransform[3] += atof(papszTokens[6]);
+				psTransform->adfRefineTransform[4] += atof(papszTokens[7]);
+				psTransform->adfRefineTransform[5] += atof(papszTokens[8]);
+				psTransform->adfRefineTransform[6] += atof(papszTokens[3]);
+				psTransform->adfRefineTransform[7] += atof(papszTokens[4]);
+				psTransform->adfRefineTransform[8] += atof(papszTokens[5]);
+				psTransform->adfRefineTransform[9] += atof(papszTokens[9]);
+				psTransform->adfRefineTransform[10] += atof(papszTokens[10]);
+				psTransform->adfRefineTransform[11] += atof(papszTokens[11]);
+			}
+			else
+				CPLDebug("RPC", "RPC refine params count(%d) does not match order(%d)", nTokens, nOrder); 
+
+			CSLDestroy(papszTokens);
+		}
+		else
+			CPLDebug("RPC", "RPC refine order must be one of 0 1 2, this is %d", nOrder); 
+	}
+
+	GDALInvGeoTransform( psTransform->adfRefineTransform, psTransform->adfReverseRefineTransform );	//2次项改正数忽略
 
     return psTransform;
 }
@@ -1771,6 +1838,20 @@ GDALRPCTransformWholeLineWithDEM( const GDALRPCTransformInfo *psTransform,
                                         psTransform->dfHeightScale,
                             padfX + i, padfY + i );
 
+		//通过经纬度高程计算得到影像行列号，再使用改正模型改正
+		double *padfTemp = (double*)psTransform->adfRefineTransform;
+		if(psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
+		{
+			GDALApplyGeoTransform(padfTemp, padfX[i], padfY[i], padfX + i, padfY + i );
+		}
+		else if(psTransform->nRefineOrder == 2)
+		{
+			double dfPixel = padfX[i];
+			double dfLine  = padfY[i];
+			padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine  * padfTemp[2] + dfPixel*dfPixel * padfTemp[6] + dfLine*dfLine * padfTemp[7] + dfPixel*dfLine * padfTemp[8];
+			padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine  * padfTemp[5] + dfPixel*dfPixel * padfTemp[9] + dfLine*dfLine * padfTemp[10] + dfPixel*dfLine * padfTemp[11];
+		}
+
         panSuccess[i] = TRUE;
     }
 
@@ -2037,6 +2118,21 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
             RPCTransformPoint( psTransform, padfX[i], padfY[i],
                                (padfZ ? padfZ[i] : 0.0) + dfHeight,
                                 padfX + i, padfY + i );
+
+			//通过经纬度高程计算得到影像行列号，再使用改正模型改正
+			double *padfTemp = (double*)psTransform->adfRefineTransform;
+			if(psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
+			{
+				GDALApplyGeoTransform(padfTemp, padfX[i], padfY[i], padfX + i, padfY + i );
+			}
+			else if(psTransform->nRefineOrder == 2)
+			{
+				double dfPixel = padfX[i];
+				double dfLine  = padfY[i];
+				padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine  * padfTemp[2] + dfPixel*dfPixel * padfTemp[6] + dfLine*dfLine * padfTemp[7] + dfPixel*dfLine * padfTemp[8];
+				padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine  * padfTemp[5] + dfPixel*dfPixel * padfTemp[9] + dfLine*dfLine * padfTemp[10] + dfPixel*dfLine * padfTemp[11];
+			}
+ 
             panSuccess[i] = TRUE;
         }
 
@@ -2057,6 +2153,8 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
 /* -------------------------------------------------------------------- */
     for( int i = 0; i < nPointCount; i++ )
     {
+		//先将影像行列号用改正模型修改，再使用RPC模型计算经纬度，二次项反算为了方便只使用了一次项系数，忽略二次项系数
+		GDALApplyGeoTransform(psTransform->adfReverseRefineTransform, padfX[i], padfY[i], padfX + i, padfY + i );
         double dfResultX = 0.0;
         double dfResultY = 0.0;
 
