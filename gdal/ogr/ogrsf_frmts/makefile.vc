@@ -300,6 +300,7 @@ plugindirs:
                 || exit 1
 
 clean:
+	-del o\*.obj *.obj
 	-del ogrsf_frmts.lib
 	-del ogrsf_frmts_sup.lib
 	for %d in ( $(DIRLIST) $(PLUGINDIRLIST) ) do \
