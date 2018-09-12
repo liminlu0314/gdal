@@ -64,6 +64,7 @@
 #include "mdreader/reader_tianhui.h"
 #include "mdreader/reader_triplesat.h"
 #include "mdreader/reader_ziyuan.h"
+#include "mdreader/reader_common.h"
 
 CPL_CVSID("$Id$")
 
@@ -209,6 +210,11 @@ GDALMDReaderBase* GDALMDReaderManager::GetReader(const char *pszPath,
 	{
 		INIT_READER(GDALMDReaderZiYuan3);
 	}
+
+    if (nType & MDR_COMMON)
+    {
+        INIT_READER(GDALMDReaderCommon);
+    }
 
     return nullptr;
 }

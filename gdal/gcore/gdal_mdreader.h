@@ -94,9 +94,10 @@ typedef enum {
 	MDR_TS       = 0x00002000,    /**< TripleSat,     METADATATYPE=TripleSat */
 	MDR_ZY02C    = 0x00004000,    /**< ZiYuan02C,     METADATATYPE=ZiYuan02C */
 	MDR_ZY3      = 0x00008000,    /**< ZiYuan3,       METADATATYPE=ZiYuan3 */
-    MDR_ANY  = MDR_DG | MDR_GE | MDR_OV | MDR_PLEIADES | MDR_SPOT | MDR_RDK1 |
-              MDR_LS | MDR_RE | MDR_KOMPSAT | MDR_EROS | MDR_ALOS |
-			  MDR_GF | MDR_TH | MDR_TS | MDR_ZY02C | MDR_ZY3 /**< any reader */
+    MDR_COMMON   = 0x00010000,    /**< Common,        METADATATYPE=Common */
+    MDR_ANY = MDR_DG | MDR_GE | MDR_OV | MDR_PLEIADES | MDR_SPOT | MDR_RDK1 |
+              MDR_LS | MDR_RE | MDR_KOMPSAT | MDR_EROS | MDR_ALOS | MDR_GF | 
+			  MDR_TH | MDR_TS | MDR_ZY02C | MDR_ZY3 | MDR_COMMON /**< any reader */
 } MDReaders;
 
 /**

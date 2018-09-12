@@ -2,7 +2,7 @@
  * $Id$
  *
  * Project:  GDAL Core
- * Purpose:  Read metadata from TripleSat imagery.
+ * Purpose:  Read metadata from common imagery.
  * Author:   Minlu Li, liminlu0314@gmail.com
  *
  ******************************************************************************
@@ -27,40 +27,32 @@
  * DEALINGS IN THE SOFTWARE.
  ****************************************************************************/
 
-#ifndef READER_TRIPLESAT_H_INCLUDED
-#define READER_TRIPLESAT_H_INCLUDED
+#ifndef READER_COMMON_H_INCLUDED
+#define READER_COMMON_H_INCLUDED
 
 #include "../gdal_mdreader.h"
 
-/**
-Metadata reader for TripleSat
+ /**
+ Metadata reader for Common
 
-TIFF filename:      GF(1|2)_PMS1_sssssssssssssss-pppppppp_(PAN1|MSS1).tiff or
-                    GF(1|2)_PMS2_sssssssssssssss-pppppppp_(PAN2|MSS2).tiff or
-                    GF1_WFV(1|2|3|4)_sssssssssssssss-pppppppp.tiff
-Metadata filename:  TIFF_BASENAME.xml
-RPC filename:       TIFF_BASENAME.rpb
+ TIFF filename:      *.tiff
+ RPC filename:       *_rpc.txt
+ RPB filename:       *.rpb
+ */
 
-Common metadata (from metadata filename):
-    AcquisitionDateTime: ReceiveTime
-    SatelliteId:         SatelliteID
-    CloudCover:          CloudPercent
-*/
-
-class GDALMDReaderTripleSat: public GDALMDReaderBase
+class GDALMDReaderCommon : public GDALMDReaderBase
 {
 public:
-    GDALMDReaderTripleSat(const char *pszPath, char **papszSiblingFiles);
-    virtual ~GDALMDReaderTripleSat();
+    GDALMDReaderCommon(const char *pszPath, char **papszSiblingFiles);
+    virtual ~GDALMDReaderCommon();
     virtual bool HasRequiredFiles() const override;
     virtual char** GetMetadataFiles() const override;
 protected:
     virtual void LoadMetadata() override;
-    virtual time_t GetAcquisitionTimeFromString(const char* pszDateTime) override;
 protected:
-    CPLString m_osXMLSourceFilename;
     CPLString m_osRPCSourceFilename;
+    CPLString m_osRPBSourceFilename;
 };
 
-#endif // READER_TRIPLESAT_H_INCLUDED
+#endif // READER_COMMON_H_INCLUDED
 

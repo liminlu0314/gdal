@@ -516,7 +516,7 @@ const char* CTime(struct CPLTimeVal &tv)
 {
     static char result[28];
     struct tm* tmp = localtime(&tv.tv_sec);
-    sprintf(result, "%d-%.2d-%.2d %.2d:%.2d:%.2d.%06d",
+    sprintf(result, "%d-%.2d-%.2d %.2d:%.2d:%.2d.%03d",
         1900 + tmp->tm_year, tmp->tm_mon, tmp->tm_mday,
         tmp->tm_hour, tmp->tm_min, tmp->tm_sec,
         static_cast<int>(tv.tv_usec));

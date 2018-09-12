@@ -30,7 +30,7 @@
 #ifndef READER_ZIYUAN_H_INCLUDED
 #define READER_ZIYUAN_H_INCLUDED
 
-#include "reader_gaofen.h"
+#include "../gdal_mdreader.h"
 
 
 /**

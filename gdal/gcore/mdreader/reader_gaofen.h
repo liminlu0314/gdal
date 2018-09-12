@@ -30,7 +30,7 @@
 #ifndef READER_GAOFEN_H_INCLUDED
 #define READER_GAOFEN_H_INCLUDED
 
-#include "reader_pleiades.h"
+#include "../gdal_mdreader.h"
 
 /**
 Metadata reader for GaoFen

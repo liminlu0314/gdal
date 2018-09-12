@@ -43,20 +43,37 @@ CPL_CVSID("$Id$");
 /**
  * GDALMDReaderTripleSat()
  */
-GDALMDReaderTripleSat::GDALMDReaderTripleSat(const char *pszPath,
-									   char **papszSiblingFiles) :
-		GDALMDReaderBase(pszPath, papszSiblingFiles)  ,
-    m_osXMLSourceFilename ( GDALFindAssociatedFile( pszPath, "XML",
-                                                         papszSiblingFiles, 0 ) ),
-    m_osRPBSourceFilename ( GDALFindAssociatedFile( pszPath, "RPB",
-                                                         papszSiblingFiles, 0 ) )
+GDALMDReaderTripleSat::GDALMDReaderTripleSat(const char *pszPath, char **papszSiblingFiles) :
+    GDALMDReaderBase(pszPath, papszSiblingFiles),
+    m_osXMLSourceFilename(GDALFindAssociatedFile(pszPath, "XML", papszSiblingFiles, 0))
 {
+    const char* pszBaseName = CPLGetBasename(pszPath);
+    const char* pszDirName = CPLGetDirname(pszPath);
+
+    // get _rpc.txt file
+    CPLString osRPCSourceFilename = CPLFormFilename(pszDirName,
+        CPLSPrintf("%s_rpc",  pszBaseName), "txt");
+
+    if (CPLCheckForFile(&osRPCSourceFilename[0], papszSiblingFiles))
+    {
+        m_osRPCSourceFilename = osRPCSourceFilename;
+    }
+    else
+    {
+        osRPCSourceFilename = CPLFormFilename(pszDirName,
+            CPLSPrintf("%s_RPC", pszBaseName), "TXT");
+        if (CPLCheckForFile(&osRPCSourceFilename[0], papszSiblingFiles))
+        {
+            m_osRPCSourceFilename = osRPCSourceFilename;
+        }
+    }
+
     if(!m_osXMLSourceFilename.empty() )
         CPLDebug( "MDReaderTripleSat", "IMD Filename: %s",
               m_osXMLSourceFilename.c_str() );
-    if(!m_osRPBSourceFilename.empty() )
+    if(!m_osRPCSourceFilename.empty() )
         CPLDebug( "MDReaderTripleSat", "RPB Filename: %s",
-              m_osRPBSourceFilename.c_str() );
+            m_osRPCSourceFilename.c_str() );
 }
 
 /**
@@ -71,7 +88,7 @@ GDALMDReaderTripleSat::~GDALMDReaderTripleSat()
  */
 bool GDALMDReaderTripleSat::HasRequiredFiles() const
 {
-	if (!m_osXMLSourceFilename.empty() && !m_osRPBSourceFilename.empty())
+	if (!m_osXMLSourceFilename.empty() && !m_osRPCSourceFilename.empty())
         return true;
 
     return false;
@@ -85,8 +102,8 @@ char** GDALMDReaderTripleSat::GetMetadataFiles() const
     char **papszFileList = NULL;
     if(!m_osXMLSourceFilename.empty())
         papszFileList= CSLAddString( papszFileList, m_osXMLSourceFilename );
-    if(!m_osRPBSourceFilename.empty())
-        papszFileList= CSLAddString( papszFileList, m_osRPBSourceFilename );
+    if(!m_osRPCSourceFilename.empty())
+        papszFileList= CSLAddString( papszFileList, m_osRPCSourceFilename );
 
     return papszFileList;
 }
@@ -113,7 +130,7 @@ void GDALMDReaderTripleSat::LoadMetadata()
     
 	m_papszDEFAULTMD = CSLAddNameValue(m_papszDEFAULTMD, MD_NAME_MDTYPE, "TripleSat");
 
-    m_papszRPCMD = GDALLoadRPBFile(m_osRPBSourceFilename.c_str());
+    m_papszRPCMD = GDALLoadRPCFile(m_osRPCSourceFilename.c_str());
 
     m_bIsMetadataLoad = true;
 
