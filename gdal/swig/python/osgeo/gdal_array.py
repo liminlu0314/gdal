@@ -90,7 +90,7 @@ except AttributeError:
     _newclass = 0
 
 
-import gdal
+import osgeo.gdal
 class VirtualMem(_object):
     """Proxy of C++ CPLVirtualMemShadow class."""
 
@@ -160,8 +160,8 @@ def RATValuesIONumPyRead(poRAT, nField, nStart, nLength):
 
 import numpy
 
-import gdalconst
-import gdal
+from osgeo import gdalconst
+from osgeo import gdal
 gdal.AllRegister()
 
 codes = {gdalconst.GDT_Byte: numpy.uint8,

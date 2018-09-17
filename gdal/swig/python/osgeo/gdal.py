@@ -107,8 +107,8 @@ def deprecation_warn(module):
        DeprecationWarning)
 
 
-from gdalconst import *
-import gdalconst
+from osgeo.gdalconst import *
+from osgeo import gdalconst
 
 
 import sys
@@ -1647,8 +1647,8 @@ class Driver(MajorObject):
 Driver_swigregister = _gdal.Driver_swigregister
 Driver_swigregister(Driver)
 
-import ogr
-import osr
+import osgeo.ogr
+import osgeo.osr
 class ColorEntry(_object):
     """Proxy of C++ GDALColorEntry class."""
 
@@ -2105,7 +2105,7 @@ class Dataset(MajorObject):
         """ Reading a chunk of a GDAL band into a numpy array. The optional (buf_xsize,buf_ysize,buf_type)
         parameters should generally not be specified if buf_obj is specified. The array is returned"""
 
-        import gdalnumeric
+        from osgeo import gdalnumeric
         return gdalnumeric.DatasetReadAsArray(self, xoff, yoff, xsize, ysize, buf_obj,
                                               buf_xsize, buf_ysize, buf_type,
                                               resample_alg=resample_alg,
@@ -2174,7 +2174,7 @@ class Dataset(MajorObject):
            Any reference to the array must be dropped before the last reference to the
            related dataset is also dropped.
         """
-        import gdalnumeric
+        from osgeo import gdalnumeric
         if xsize is None:
             xsize = self.RasterXSize
         if ysize is None:
@@ -2209,7 +2209,7 @@ class Dataset(MajorObject):
            Any reference to the array must be dropped before the last reference to the
            related dataset is also dropped.
         """
-        import gdalnumeric
+        from osgeo import gdalnumeric
         if xsize is None:
             xsize = self.RasterXSize
         if ysize is None:
@@ -2628,7 +2628,7 @@ class Band(MajorObject):
         """ Reading a chunk of a GDAL band into a numpy array. The optional (buf_xsize,buf_ysize,buf_type)
         parameters should generally not be specified if buf_obj is specified. The array is returned"""
 
-        import gdalnumeric
+        from osgeo import gdalnumeric
 
         return gdalnumeric.BandReadAsArray(self, xoff, yoff,
                                            win_xsize, win_ysize,
@@ -2641,7 +2641,7 @@ class Band(MajorObject):
                    resample_alg=gdalconst.GRIORA_NearestNeighbour,
                    callback=None,
                    callback_data=None):
-        import gdalnumeric
+        from osgeo import gdalnumeric
 
         return gdalnumeric.BandWriteArray(self, array, xoff, yoff,
                                           resample_alg=resample_alg,
@@ -2658,7 +2658,7 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          import gdalnumeric
+          from osgeo import gdalnumeric
           if xsize is None:
               xsize = self.XSize
           if ysize is None:
@@ -2681,7 +2681,7 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          import gdalnumeric
+          from osgeo import gdalnumeric
           if options is None:
               virtualmem = self.GetVirtualMemAuto(eAccess)
           else:
@@ -2698,7 +2698,7 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          import gdalnumeric
+          from osgeo import gdalnumeric
           if xsize is None:
               xsize = self.XSize
           if ysize is None:
@@ -2889,13 +2889,23 @@ class RasterAttributeTable(_object):
         return _gdal.RasterAttributeTable_DumpReadable(self, *args)
 
 
+    def SetTableType(self, *args):
+        """SetTableType(RasterAttributeTable self, GDALRATTableType eTableType)"""
+        return _gdal.RasterAttributeTable_SetTableType(self, *args)
+
+
+    def GetTableType(self, *args):
+        """GetTableType(RasterAttributeTable self) -> GDALRATTableType"""
+        return _gdal.RasterAttributeTable_GetTableType(self, *args)
+
+
     def WriteArray(self, array, field, start=0):
-        import gdalnumeric
+        from osgeo import gdalnumeric
 
         return gdalnumeric.RATWriteArray(self, array, field, start)
 
     def ReadAsArray(self, field, start=0, length=None):
-        import gdalnumeric
+        from osgeo import gdalnumeric
 
         return gdalnumeric.RATReadArray(self, field, start, length)
 
@@ -2957,6 +2967,10 @@ def RegenerateOverview(*args, **kwargs):
 def ContourGenerate(*args, **kwargs):
     """ContourGenerate(Band srcBand, double contourInterval, double contourBase, int fixedLevelCount, int useNoData, double noDataValue, Layer dstLayer, int idField, int elevField, GDALProgressFunc callback=0, void * callback_data=None) -> int"""
     return _gdal.ContourGenerate(*args, **kwargs)
+
+def ContourGenerateEx(*args, **kwargs):
+    """ContourGenerateEx(Band srcBand, Layer dstLayer, char ** options=None, GDALProgressFunc callback=0, void * callback_data=None) -> int"""
+    return _gdal.ContourGenerateEx(*args, **kwargs)
 
 def AutoCreateWarpedVRT(*args):
     """AutoCreateWarpedVRT(Dataset src_ds, char const * src_wkt=None, char const * dst_wkt=None, GDALResampleAlg eResampleAlg, double maxerror=0.0) -> Dataset"""

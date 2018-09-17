@@ -103,7 +103,10 @@ def ogr_pg_1():
 
     gdaltest.pg_retrieve_fid = False
     if version_str[0:11] == "PostgreSQL ":
-        if float(version_str[11:14]) >= 8.2:
+        v = version_str[11:14]
+        if v.endswith('b'):
+            v = v[0:-1]
+        if float(v) >= 8.2:
             gdaltest.pg_retrieve_fid = True
 
     gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -1095,9 +1098,7 @@ def ogr_pg_21_3d_geometries():
     if gdaltest.pg_ds is None or gdaltest.ogr_pg_second_run:
         return 'skip'
 
-    connection_string = "dbname=autotest"
-
-    gdaltest.pg_ds = ogr.Open('PG:' + connection_string, update=1)
+    gdaltest.pg_ds = ogr.Open('PG:' + gdaltest.pg_connection_string, update=1)
 
     gdaltest.pg_ds.ExecuteSQL("CREATE TABLE zgeoms (field_no integer)")
     sql_lyr = gdaltest.pg_ds.ExecuteSQL("SELECT AddGeometryColumn('public','zgeoms','wkb_geometry',-1,'GEOMETRY',3)")
@@ -1116,7 +1117,7 @@ def ogr_pg_21_3d_geometries():
     gdaltest.pg_ds.Destroy()
     gdaltest.pg_ds = None
 
-    gdaltest.pg_ds = ogr.Open('PG:' + connection_string, update=1)
+    gdaltest.pg_ds = ogr.Open('PG:' + gdaltest.pg_connection_string, update=1)
     if gdaltest.pg_ds is None:
         gdaltest.post_reason('Cannot open the dataset')
         return 'fail'
@@ -5780,4 +5781,4 @@ if __name__ == '__main__':
 
     gdaltest.run_tests(gdaltest_list)
 
-    gdaltest.summarize()
+    sys.exit(gdaltest.summarize())

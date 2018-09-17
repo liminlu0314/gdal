@@ -30,7 +30,7 @@
 
 %feature("autodoc");
 
-%module gdal_array
+%module (package="osgeo") gdal_array
 
 %{
 // Define this unconditionally of whether DEBUG_BOOL is defined or not,
@@ -1077,8 +1077,8 @@ retStringAndCPLFree* GetArrayFilename(PyArrayObject *psArray)
 %pythoncode %{
 import numpy
 
-import gdalconst
-import gdal
+from osgeo import gdalconst
+from osgeo import gdal
 gdal.AllRegister()
 
 codes = {gdalconst.GDT_Byte: numpy.uint8,
