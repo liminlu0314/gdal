@@ -53,6 +53,7 @@
 #include "ogr_api.h"
 #include "ogr_spatialref.h"
 #include "ogr_srs_api.h"
+#include "gdal_alg_ext.h"
 
 // #define DEBUG_VERBOSE_EXTRACT_DEM
 
@@ -1018,7 +1019,7 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
 
 	const char *pszRpcRefineOrder = CSLFetchNameValueDef( papszOptions, "RPC_REFINE_ORDER", "0" );
 	const char *pszRpcRefineParam = CSLFetchNameValueDef( papszOptions, "RPC_REFINE_PARAM", "0 0" );
-	if(pszRpcRefineParam != nullptr && pszRpcRefineOrder != nullptr)	//½âÎöRPCÏñ·½¸ÄÕý·ÂÉä±ä»»²ÎÊý
+	if(pszRpcRefineParam != nullptr && pszRpcRefineOrder != nullptr)	//è§£æžRPCåƒæ–¹æ”¹æ­£ä»¿å°„å˜æ¢å‚æ•°
 	{
 		int nOrder = (int)CPLAtof(pszRpcRefineOrder);
 		if(nOrder >=0 || nOrder < 3)
@@ -1062,7 +1063,10 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
 			CPLDebug("RPC", "RPC refine order must be one of 0 1 2, this is %d", nOrder); 
 	}
 
-	GDALInvGeoTransform( psTransform->adfRefineTransform, psTransform->adfReverseRefineTransform );	//2´ÎÏî¸ÄÕýÊýºöÂÔ
+    if (psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
+        GDALInvGeoTransform(psTransform->adfRefineTransform, psTransform->adfReverseRefineTransform);
+    else if (psTransform->nRefineOrder == 2)
+        GDALInvGeoTransform2(psTransform->adfRefineTransform, psTransform->adfReverseRefineTransform);
 
     return psTransform;
 }
@@ -1838,7 +1842,7 @@ GDALRPCTransformWholeLineWithDEM( const GDALRPCTransformInfo *psTransform,
                                         psTransform->dfHeightScale,
                             padfX + i, padfY + i );
 
-		//Í¨¹ý¾­Î³¶È¸ß³Ì¼ÆËãµÃµ½Ó°ÏñÐÐÁÐºÅ£¬ÔÙÊ¹ÓÃ¸ÄÕýÄ£ÐÍ¸ÄÕý
+		//é€šè¿‡ç»çº¬åº¦é«˜ç¨‹è®¡ç®—å¾—åˆ°å½±åƒè¡Œåˆ—å·ï¼Œå†ä½¿ç”¨æ”¹æ­£æ¨¡åž‹æ”¹æ­£
 		double *padfTemp = (double*)psTransform->adfRefineTransform;
 		if(psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
 		{
@@ -1846,10 +1850,11 @@ GDALRPCTransformWholeLineWithDEM( const GDALRPCTransformInfo *psTransform,
 		}
 		else if(psTransform->nRefineOrder == 2)
 		{
-			double dfPixel = padfX[i];
-			double dfLine  = padfY[i];
-			padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine  * padfTemp[2] + dfPixel*dfPixel * padfTemp[6] + dfLine*dfLine * padfTemp[7] + dfPixel*dfLine * padfTemp[8];
-			padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine  * padfTemp[5] + dfPixel*dfPixel * padfTemp[9] + dfLine*dfLine * padfTemp[10] + dfPixel*dfLine * padfTemp[11];
+            GDALApplyGeoTransform2(padfTemp, padfX[i], padfY[i], padfX + i, padfY + i);
+            //double dfPixel = padfX[i];
+            //double dfLine = padfY[i];
+            //padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine * padfTemp[2] + dfPixel * dfPixel * padfTemp[6] + dfLine * dfLine * padfTemp[7] + dfPixel * dfLine * padfTemp[8];
+            //padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine * padfTemp[5] + dfPixel * dfPixel * padfTemp[9] + dfLine * dfLine * padfTemp[10] + dfPixel * dfLine * padfTemp[11];
 		}
 
         panSuccess[i] = TRUE;
@@ -2119,7 +2124,7 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
                                (padfZ ? padfZ[i] : 0.0) + dfHeight,
                                 padfX + i, padfY + i );
 
-			//Í¨¹ý¾­Î³¶È¸ß³Ì¼ÆËãµÃµ½Ó°ÏñÐÐÁÐºÅ£¬ÔÙÊ¹ÓÃ¸ÄÕýÄ£ÐÍ¸ÄÕý
+			//é€šè¿‡ç»çº¬åº¦é«˜ç¨‹è®¡ç®—å¾—åˆ°å½±åƒè¡Œåˆ—å·ï¼Œå†ä½¿ç”¨æ”¹æ­£æ¨¡åž‹æ”¹æ­£
 			double *padfTemp = (double*)psTransform->adfRefineTransform;
 			if(psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
 			{
@@ -2127,10 +2132,11 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
 			}
 			else if(psTransform->nRefineOrder == 2)
 			{
-				double dfPixel = padfX[i];
-				double dfLine  = padfY[i];
-				padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine  * padfTemp[2] + dfPixel*dfPixel * padfTemp[6] + dfLine*dfLine * padfTemp[7] + dfPixel*dfLine * padfTemp[8];
-				padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine  * padfTemp[5] + dfPixel*dfPixel * padfTemp[9] + dfLine*dfLine * padfTemp[10] + dfPixel*dfLine * padfTemp[11];
+                GDALApplyGeoTransform2(padfTemp, padfX[i], padfY[i], padfX + i, padfY + i);
+                //double dfPixel = padfX[i];
+                //double dfLine = padfY[i];
+                //padfX[i] = padfTemp[0] + dfPixel * padfTemp[1] + dfLine * padfTemp[2] + dfPixel * dfPixel * padfTemp[6] + dfLine * dfLine * padfTemp[7] + dfPixel * dfLine * padfTemp[8];
+                //padfY[i] = padfTemp[3] + dfPixel * padfTemp[4] + dfLine * padfTemp[5] + dfPixel * dfPixel * padfTemp[9] + dfLine * dfLine * padfTemp[10] + dfPixel * dfLine * padfTemp[11];
 			}
  
             panSuccess[i] = TRUE;
@@ -2153,8 +2159,12 @@ int GDALRPCTransform( void *pTransformArg, int bDstToSrc,
 /* -------------------------------------------------------------------- */
     for( int i = 0; i < nPointCount; i++ )
     {
-		//ÏÈ½«Ó°ÏñÐÐÁÐºÅÓÃ¸ÄÕýÄ£ÐÍÐÞ¸Ä£¬ÔÙÊ¹ÓÃRPCÄ£ÐÍ¼ÆËã¾­Î³¶È£¬¶þ´ÎÏî·´ËãÎªÁË·½±ãÖ»Ê¹ÓÃÁËÒ»´ÎÏîÏµÊý£¬ºöÂÔ¶þ´ÎÏîÏµÊý
-		GDALApplyGeoTransform(psTransform->adfReverseRefineTransform, padfX[i], padfY[i], padfX + i, padfY + i );
+		//å…ˆå°†å½±åƒè¡Œåˆ—å·ç”¨æ”¹æ­£æ¨¡åž‹ä¿®æ”¹ï¼Œå†ä½¿ç”¨RPCæ¨¡åž‹è®¡ç®—ç»çº¬åº¦
+        if (psTransform->nRefineOrder == 0 || psTransform->nRefineOrder == 1)
+            GDALApplyGeoTransform(psTransform->adfReverseRefineTransform, padfX[i], padfY[i], padfX + i, padfY + i);
+        else if (psTransform->nRefineOrder == 2)
+            GDALApplyGeoTransform2(psTransform->adfReverseRefineTransform, padfX[i], padfY[i], padfX + i, padfY + i);
+
         double dfResultX = 0.0;
         double dfResultY = 0.0;
 

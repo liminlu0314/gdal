@@ -77,6 +77,13 @@ int CPL_DLL GDALTINTransform(
 	double *x, double *y, double *z, int *panSuccess);
 
 
+void GDALApplyGeoTransform2(double *padfGeoTransform,
+    double dfPixel, double dfLine,
+    double *pdfGeoX, double *pdfGeoY);
+
+int GDALInvGeoTransform2(double *padfIn, double *padfOut);
+
+
 CPL_C_END
 
 #endif /* endif GDAL_CEM_H_INCLUDED */

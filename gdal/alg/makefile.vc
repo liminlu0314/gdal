@@ -33,7 +33,7 @@ OBJ =	gdaldither.obj gdalmediancut.obj gdal_crs.obj gdaltransformer.obj \
 	gdal_octave.obj gdal_simplesurf.obj gdalmatching.obj \
 	gdaltransformgeolocs.obj delaunay.obj gdalpansharpen.obj \
 	gdalapplyverticalshiftgrid.obj gdalwarpkernel_opencl.obj \
-	gdal_tin.obj gdal_cem.obj
+	gdal_alg_ext.obj gdal_tin.obj gdal_cem.obj
 
 !IF "$(SSEFLAGS)" == "/DHAVE_SSE_AT_COMPILE_TIME"
 SSE_OBJ = gdalgridsse.obj
