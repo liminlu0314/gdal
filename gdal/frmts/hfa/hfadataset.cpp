@@ -71,7 +71,7 @@ constexpr double D2R = M_PI / 180.0;
 constexpr double ARCSEC2RAD = M_PI / 648000.0;
 constexpr double RAD2ARCSEC = 648000.0 / M_PI;
 
-int WritePeStringIfNeeded( OGRSpatialReference *poSRS, HFAHandle hHFA );
+int WritePeStringIfNeeded( OGRSpatialReference *poSRS, HFAHandle hHFA, bool bForceToPEString);
 void ClearSR( HFAHandle hHFA );
 
 static const char *const apszDatumMap[] = {
@@ -3456,7 +3456,7 @@ CPLErr HFADataset::WriteProjection()
         }
 
         // Verify if we need to write a ESRI PE string.
-        bPEStringStored = CPL_TO_BOOL(WritePeStringIfNeeded(&oSRS, hHFA));
+        bPEStringStored = CPL_TO_BOOL(WritePeStringIfNeeded(&oSRS, hHFA, bForceToPEString));
 
         sPro.proSpheroid.sphereName =
             (char *)poGeogSRS->GetAttrValue("GEOGCS|DATUM|SPHEROID");
@@ -4174,7 +4174,7 @@ CPLErr HFADataset::WriteProjection()
 /************************************************************************/
 /*                       WritePeStringIfNeeded()                        */
 /************************************************************************/
-int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA )
+int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA, bool bForceToPEString)
 {
     if( !poSRS || !hHFA )
         return FALSE;
@@ -4252,7 +4252,7 @@ int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA )
             }
         }
     }
-    if( ret )
+    if( ret && bForceToPEString)
     {
         char *pszPEString = nullptr;
         poSRS->morphToESRI();
