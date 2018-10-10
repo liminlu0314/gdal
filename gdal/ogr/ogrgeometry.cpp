@@ -3456,41 +3456,60 @@ static OGRGeometry* BuildGeometryFromTwoGeoms(
     const OGRGeometry* poSelf,
     const OGRGeometry* poOtherGeom,
     GEOSGeometry* (*pfnGEOSFunction_r)(GEOSContextHandle_t,
-                                       const GEOSGeometry*,
-                                       const GEOSGeometry*) )
+        const GEOSGeometry*,
+        const GEOSGeometry*))
 {
     OGRGeometry *poOGRProduct = nullptr;
 
     GEOSContextHandle_t hGEOSCtxt = poSelf->createGEOSContext();
     GEOSGeom hThisGeosGeom = poSelf->exportToGEOS(hGEOSCtxt);
     GEOSGeom hOtherGeosGeom = poOtherGeom->exportToGEOS(hGEOSCtxt);
-    if( hThisGeosGeom != nullptr && hOtherGeosGeom != nullptr )
+    if (hThisGeosGeom != nullptr && hOtherGeosGeom != nullptr)
     {
-		GEOSGeom hTGeom = hThisGeosGeom;
-		GEOSGeom hOGeom = hOtherGeosGeom;
+        GEOSGeom hTGeom = hThisGeosGeom;
+        GEOSGeom hOGeom = hOtherGeosGeom;
 
-		bool bUsePrecision = CPLTestBool(CPLGetConfigOption("USE_GEOS_PRECISION", "FALSE"));
-		if (bUsePrecision)
-		{
-			double dfPrecision = CPLAtofM(CPLGetConfigOption("GEOS_PRECISION", "0"));
-			hTGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hThisGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
-			hOGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hOtherGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
-		}
+        bool bUsePrecision = CPLTestBool(CPLGetConfigOption("USE_GEOS_PRECISION", "FALSE"));
+        double dfPrecision = 0.000000001;
+        if (bUsePrecision)
+        {
+            dfPrecision = CPLAtofM(CPLGetConfigOption("GEOS_PRECISION", "0.000000001"));
+            hTGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hThisGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+            hOGeom = GEOSGeom_setPrecision_r(hGEOSCtxt, hOtherGeosGeom, dfPrecision, GEOS_PREC_KEEP_COLLAPSED);
+        }
 
-		GEOSGeom hGeosProduct = pfnGEOSFunction_r(hGEOSCtxt, hTGeom, hOGeom);
+        bool bUseTolerance = CPLTestBool(CPLGetConfigOption("USE_GEOS_TOLERANCE", "FALSE"));
+        double dfTolerance = 0.00000001;
+        if (bUseTolerance)
+        {
+            double dfToleranceDef = 0.00000001;
+            if (bUsePrecision && dfPrecision != 0)
+            {
+                dfToleranceDef = 10.0 * dfPrecision;
+            }
+            dfTolerance = CPLAtofM(CPLGetConfigOption("GEOS_TOLERANCE", "0.00000001"));
+            GEOSGeom hTGeom1 = GEOSSnap_r(hGEOSCtxt, hTGeom, hOGeom, dfTolerance);
+            GEOSGeom hOGeom1 = GEOSSnap_r(hGEOSCtxt, hOGeom, hTGeom1, dfTolerance);
+            GEOSGeom_destroy_r(hGEOSCtxt, hTGeom);
+            GEOSGeom_destroy_r(hGEOSCtxt, hOGeom);
+            hTGeom = hTGeom1;
+            hOGeom = hOGeom1;
+        }
 
-		if (bUsePrecision)
-		{
-			GEOSGeom_destroy_r(hGEOSCtxt, hTGeom);
-			GEOSGeom_destroy_r(hGEOSCtxt, hOGeom);
-		}
+        GEOSGeom hGeosProduct = pfnGEOSFunction_r(hGEOSCtxt, hTGeom, hOGeom);
+
+        if (bUsePrecision)
+        {
+            GEOSGeom_destroy_r(hGEOSCtxt, hTGeom);
+            GEOSGeom_destroy_r(hGEOSCtxt, hOGeom);
+        }
 
         poOGRProduct = BuildGeometryFromGEOS(hGEOSCtxt, hGeosProduct,
-                                             poSelf, poOtherGeom);
+            poSelf, poOtherGeom);
     }
-    GEOSGeom_destroy_r( hGEOSCtxt, hThisGeosGeom );
-    GEOSGeom_destroy_r( hGEOSCtxt, hOtherGeosGeom );
-    poSelf->freeGEOSContext( hGEOSCtxt );
+    GEOSGeom_destroy_r(hGEOSCtxt, hThisGeosGeom);
+    GEOSGeom_destroy_r(hGEOSCtxt, hOtherGeosGeom);
+    poSelf->freeGEOSContext(hGEOSCtxt);
 
     return poOGRProduct;
 }
