@@ -1292,6 +1292,8 @@ GDALDataset *PDSDataset::Open( GDALOpenInfo * poOpenInfo )
             poDS->SetMetadataItem( apszKeywords[i], pszKeywordValue );
     }
 
+    poDS->SetMetadata(poDS->oKeywords.GetKeywordList(), "PDS");
+
 /* -------------------------------------------------------------------- */
 /*      Initialize any PAM information.                                 */
 /* -------------------------------------------------------------------- */

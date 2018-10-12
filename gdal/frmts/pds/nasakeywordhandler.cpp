@@ -55,6 +55,9 @@
 #include "nasakeywordhandler.h"
 #include "ogrgeojsonreader.h"
 #include <vector>
+#include <algorithm> 
+#include <functional>
+using namespace std;
 
 CPL_CVSID("$Id$")
 
@@ -135,6 +138,19 @@ int NASAKeywordHandler::Ingest( VSILFILE *fp, int nOffset )
     return ReadGroup( "", oJSon, 0 );
 }
 
+inline CPLString& Trim(CPLString &ss)
+{
+    int(*pf)(int) = isspace;
+
+    CPLString::iterator pl = find_if(ss.begin(), ss.end(), not1(ptr_fun(pf)));
+    ss.erase(ss.begin(), pl);
+
+    CPLString::reverse_iterator pr = find_if(ss.rbegin(), ss.rend(), not1(ptr_fun(pf)));
+    ss.erase(pr.base(), ss.end());
+
+    return ss;
+}
+
 /************************************************************************/
 /*                             ReadGroup()                              */
 /************************************************************************/
@@ -150,6 +166,9 @@ int NASAKeywordHandler::ReadGroup( const char *pszPathPrefix, CPLJSONObject &oCu
         CPLString osName, osValue;
         if( !ReadPair( osName, osValue, oCur ) )
             return FALSE;
+
+        osName = Trim(osName);
+        osValue = Trim(osValue);
 
         if( EQUAL(osName,"OBJECT") || EQUAL(osName,"GROUP") )
         {
@@ -512,7 +531,7 @@ int NASAKeywordHandler::ReadWord( CPLString &osWord,
            && ((bParseList && *pszHeaderNext != ',' && *pszHeaderNext != '(' &&
                 *pszHeaderNext != ')'&& *pszHeaderNext != '{' &&
                 *pszHeaderNext != '}' ) ||
-               (!bParseList && !isspace(static_cast<unsigned char>( *pszHeaderNext ) ))) )
+               (!bParseList && *pszHeaderNext != '\n')) )
     {
         osWord += *pszHeaderNext;
         pszHeaderNext++;
