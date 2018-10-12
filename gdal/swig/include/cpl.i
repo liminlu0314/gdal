@@ -308,6 +308,7 @@ unsigned int CPLGetErrorCounter();
 
 int VSIGetLastErrorNo();
 const char *VSIGetLastErrorMsg();
+void VSIErrorReset();
 
 void CPLPushFinderLocation( const char * utf8_path );
 
@@ -551,6 +552,7 @@ VSILFILE   *wrapper_VSIFOpenExL( const char *utf8_path, const char *pszMode, int
 %}
 
 int VSIFEofL( VSILFILE* fp );
+int VSIFFlushL( VSILFILE* fp );
 
 VSI_RETVAL VSIFCloseL( VSILFILE* fp );
 

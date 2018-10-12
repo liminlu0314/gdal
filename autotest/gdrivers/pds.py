@@ -333,6 +333,28 @@ END
 
     return 'success'
 
+###############################################################################
+# Read a hacked example of reading an image where the line offset is not
+# a multiple of the record size
+# https://github.com/OSGeo/gdal/issues/955
+
+
+def pds_line_offset_not_multiple_of_record():
+
+    tst = gdaltest.GDALTest('PDS', 'pds/map_000_038_truncated.lbl', 1, 14019)
+    return tst.testOpen()
+
+
+###############################################################################
+# Read http://pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/mrocr_2104/trdr/2010/2010_095/hsp00017ba0/hsp00017ba0_01_ra218s_trr3.lbl
+# Test ability of using OBJECT = FILE section to support CRISM
+# as well as BAND_STORAGE_TYPE = LINE_INTERLEAVED
+
+def pds_band_storage_type_line_interleaved():
+
+    tst = gdaltest.GDALTest('PDS', 'pds/hsp00017ba0_01_ra218s_trr3_truncated.lbl', 1, 364)
+    return tst.testOpen()
+
 
 gdaltest_list = [
     pds_1,
@@ -344,7 +366,9 @@ gdaltest_list = [
     pds_7,
     pds_8,
     pds_9,
-    pds_10]
+    pds_10,
+    pds_line_offset_not_multiple_of_record,
+    pds_band_storage_type_line_interleaved]
 
 if __name__ == '__main__':
 

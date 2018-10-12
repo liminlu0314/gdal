@@ -3756,6 +3756,37 @@ def tiff_read_zstd_corrupted2():
     with gdaltest.error_handler():
         return ut.testOpen()
 
+
+###############################################################################
+# Test WEBP compression
+
+
+def tiff_read_webp():
+
+    md = gdal.GetDriverByName('GTiff').GetMetadata()
+    if md['DMD_CREATIONOPTIONLIST'].find('WEBP') == -1:
+        return 'skip'
+    stats = (0, 215, 66.38, 47.186)
+    ut = gdaltest.GDALTest('GTiff', 'tif_webp.tif', 1, None)
+    success = ut.testOpen(check_approx_stat=stats, stat_epsilon=1)
+    gdal.Unlink('data/tif_webp.tif.aux.xml')
+    return success
+
+###############################################################################
+# Test WEBP compression
+
+
+def tiff_read_webp_huge_single_strip():
+
+    md = gdal.GetDriverByName('GTiff').GetMetadata()
+    if md['DMD_CREATIONOPTIONLIST'].find('WEBP') == -1:
+        return 'skip'
+    ds = gdal.Open('data/tif_webp_huge_single_strip.tif')
+    if ds.GetRasterBand(1).Checksum() == 0:
+        return 'fail'
+
+    return 'success'
+
 ###############################################################################
 
 
@@ -3947,6 +3978,9 @@ gdaltest_list.append((tiff_read_overview_of_external_mask))
 
 gdaltest_list.append((tiff_read_online_1))
 gdaltest_list.append((tiff_read_online_2))
+
+gdaltest_list.append((tiff_read_webp))
+gdaltest_list.append((tiff_read_webp_huge_single_strip))
 
 # gdaltest_list = [ tiff_read_mmap_interface ]
 

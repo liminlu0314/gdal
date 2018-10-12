@@ -191,6 +191,7 @@ class GDALGeoPackageDataset final : public OGRSQLiteBaseDataSource, public GDALG
 
         int                     FindLayerIndex(const char* pszLayerName);
 
+        bool                    HasGriddedCoverageAncillaryTable();
         bool                    CreateTileGriddedTable(char** papszOptions);
 
         void                    CreateOGREmptyTableIfNeeded();
@@ -512,6 +513,8 @@ class OGRGeoPackageTableLayer final : public OGRGeoPackageLayer
     void                CreateSpatialIndexIfNecessary();
     bool                CreateSpatialIndex(const char* pszTableName = nullptr);
     bool                DropSpatialIndex(bool bCalledFromSQLFunction = false);
+    CPLString           ReturnSQLCreateSpatialIndexTriggers(const char* pszTableName);
+    CPLString           ReturnSQLDropSpatialIndexTriggers();
 
     virtual char **     GetMetadata( const char *pszDomain = nullptr ) override;
     virtual const char *GetMetadataItem( const char * pszName,

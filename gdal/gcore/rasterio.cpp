@@ -928,6 +928,9 @@ CPLErr GDALRasterBand::RasterIOResampled(
     // Do the resampling.
     if( bUseWarp )
     {
+        int bHasNoData = FALSE;
+        double dfNoDataValue = GetNoDataValue(&bHasNoData) ;
+
         VRTDatasetH hVRTDS = nullptr;
         GDALRasterBandH hVRTBand = nullptr;
         if( GetDataset() == nullptr )
@@ -993,6 +996,23 @@ CPLErr GDALRasterBand::RasterIOResampled(
                     psExtraArg->pfnProgress : GDALDummyProgress;
         psWarpOptions->pProgressArg = psExtraArg->pProgressData;
         psWarpOptions->pfnTransformer = GDALRasterIOTransformer;
+        if (bHasNoData)
+        {
+            psWarpOptions->papszWarpOptions = CSLSetNameValue( psWarpOptions->papszWarpOptions,
+                                                    "INIT_DEST", "NO_DATA");
+            if (psWarpOptions->padfSrcNoDataReal == nullptr)
+            {
+                psWarpOptions->padfSrcNoDataReal = static_cast<double*>(CPLMalloc(sizeof(double)));
+                psWarpOptions->padfSrcNoDataReal[0] = dfNoDataValue;
+            }
+
+            if (psWarpOptions->padfDstNoDataReal == nullptr)
+            {
+                psWarpOptions->padfDstNoDataReal = static_cast<double*>(CPLMalloc(sizeof(double)));
+                psWarpOptions->padfDstNoDataReal[0] = dfNoDataValue;
+            }
+        }
+
         GDALRasterIOTransformerStruct sTransformer;
         sTransformer.dfXOff = bHasXOffVirtual ? 0 : dfXOff;
         sTransformer.dfYOff = bHasYOffVirtual ? 0 : dfYOff;
@@ -2684,13 +2704,50 @@ inline void GDALCopyWordsFromT( const T* const CPL_RESTRICT pSrcData,
 /*                          GDALReplicateWord()                         */
 /************************************************************************/
 
+template <class T>
+inline void GDALReplicateWordT( void * pDstData,
+                                int nDstPixelStride,
+                                unsigned int nWordCount )
+{
+    const T valSet = *static_cast<const T*>(pDstData);
+    if( nDstPixelStride == static_cast<int>(sizeof(T)) )
+    {
+        T* pDstPtr = static_cast<T*>(pDstData) + 1;
+        while( nWordCount >= 4 )
+        {
+            nWordCount -= 4;
+            pDstPtr[0] = valSet;
+            pDstPtr[1] = valSet;
+            pDstPtr[2] = valSet;
+            pDstPtr[3] = valSet;
+            pDstPtr += 4;
+        }
+        while( nWordCount > 0 )
+        {
+            --nWordCount;
+            *pDstPtr = valSet;
+            pDstPtr++;
+        }
+    }
+    else
+    {
+        GByte *pabyDstPtr = static_cast<GByte *>(pDstData) + nDstPixelStride;
+        while( nWordCount > 0 )
+        {
+            --nWordCount;
+            *reinterpret_cast<T*>(pabyDstPtr) = valSet;
+            pabyDstPtr += nDstPixelStride;
+        }
+    }
+}
+
 static
 void GDALReplicateWord( const void * CPL_RESTRICT pSrcData,
                         GDALDataType eSrcType,
                         void * CPL_RESTRICT pDstData,
                         GDALDataType eDstType,
                         int nDstPixelStride,
-                        int nWordCount)
+                        unsigned int nWordCount)
 {
 /* ----------------------------------------------------------------------- */
 /* Special case when the source data is always the same value              */
@@ -2720,8 +2777,9 @@ void GDALReplicateWord( const void * CPL_RESTRICT pSrcData,
             else
             {
                 GByte valSet = *reinterpret_cast<const GByte*>(pDstData);
-                while(nWordCount--)
+                while( nWordCount > 0 )
                 {
+                    --nWordCount;
                     *pabyDstWord = valSet;
                     pabyDstWord += nDstPixelStride;
                 }
@@ -2732,12 +2790,7 @@ void GDALReplicateWord( const void * CPL_RESTRICT pSrcData,
 #define CASE_DUPLICATE_SIMPLE(enum_type, c_type) \
         case enum_type:\
         { \
-            c_type valSet = *reinterpret_cast<const c_type*>(pDstData); \
-            while(nWordCount--) \
-            { \
-                *reinterpret_cast<c_type*>(pabyDstWord) = valSet; \
-                pabyDstWord += nDstPixelStride; \
-            } \
+            GDALReplicateWordT<c_type>(pDstData, nDstPixelStride, nWordCount); \
             break; \
         }
 
@@ -2753,8 +2806,9 @@ void GDALReplicateWord( const void * CPL_RESTRICT pSrcData,
         { \
             c_type valSet1 = reinterpret_cast<const c_type*>(pDstData)[0]; \
             c_type valSet2 = reinterpret_cast<const c_type*>(pDstData)[1]; \
-            while(nWordCount--) \
+            while( nWordCount > 0 ) \
             { \
+                --nWordCount; \
                 reinterpret_cast<c_type*>(pabyDstWord)[0] = valSet1; \
                 reinterpret_cast<c_type*>(pabyDstWord)[1] = valSet2; \
                 pabyDstWord += nDstPixelStride; \

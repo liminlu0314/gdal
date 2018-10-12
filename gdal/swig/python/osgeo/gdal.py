@@ -1312,6 +1312,10 @@ def VSIGetLastErrorMsg(*args):
     """VSIGetLastErrorMsg() -> char const *"""
     return _gdal.VSIGetLastErrorMsg(*args)
 
+def VSIErrorReset(*args):
+    """VSIErrorReset()"""
+    return _gdal.VSIErrorReset(*args)
+
 def PushFinderLocation(*args):
     """PushFinderLocation(char const * utf8_path)"""
     return _gdal.PushFinderLocation(*args)
@@ -1473,6 +1477,10 @@ def VSIFOpenExL(*args):
 def VSIFEofL(*args):
     """VSIFEofL(VSILFILE fp) -> int"""
     return _gdal.VSIFEofL(*args)
+
+def VSIFFlushL(*args):
+    """VSIFFlushL(VSILFILE fp) -> int"""
+    return _gdal.VSIFFlushL(*args)
 
 def VSIFCloseL(*args):
     """VSIFCloseL(VSILFILE fp) -> VSI_RETVAL"""
@@ -1647,8 +1655,8 @@ class Driver(MajorObject):
 Driver_swigregister = _gdal.Driver_swigregister
 Driver_swigregister(Driver)
 
-import osgeo.ogr
-import osgeo.osr
+from . import ogr
+from . import osr
 class ColorEntry(_object):
     """Proxy of C++ GDALColorEntry class."""
 
