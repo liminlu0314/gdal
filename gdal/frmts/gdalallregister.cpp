@@ -377,7 +377,6 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_mbtiles
     GDALRegister_MBTiles();
-	GDALRegister_TFATMBTiles();
 #endif
 
 #ifdef FRMT_plmosaic
@@ -569,15 +568,8 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_IGNFHeightASCIIGrid();
 #endif
 
-#ifdef FRMT_cnsdtf
-    GDALRegister_CNSDTF();
-#endif
-
-#ifdef FRMT_landsat
-	GDALRegister_LANDSAT();
-#endif
-
     // NOTE: you need to generally your own driver before that line.
+
 /* -------------------------------------------------------------------- */
 /*     GNM and OGR drivers                                              */
 /* -------------------------------------------------------------------- */
