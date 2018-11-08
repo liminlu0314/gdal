@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <limits>
 #include <string>
 
 #include "cpl_conv.h"
@@ -691,8 +692,14 @@ CPLErr VRTSimpleSource::XMLInit( CPLXMLNode *psSrc, const char *pszVRTPath,
 
         // Only the information of rasterBand nSrcBand will be accurate
         // but that's OK since we only use that band afterwards.
-        for( int i = 1; i <= nSrcBand; i++ )
-            proxyDS->AddSrcBandDescription(eDataType, nBlockXSize, nBlockYSize);
+        //
+        // Previously this added a src band for every band <= nSrcBand, but this becomes
+        // prohibitely expensive for files with a large number of bands. This optimization
+        // only adds the desired band and the rest of the bands will simply be initialized with a nullptr.
+        // This assumes no other code here accesses any of the lower bands in the GDALProxyPoolDataset.
+        // It has been suggested that in addition, we should to try share GDALProxyPoolDataset between multiple
+        // Simple Sources, which would save on memory for papoBands. For now, that's not implemented.
+        proxyDS->AddSrcBand(nSrcBand, eDataType, nBlockXSize, nBlockYSize);
 
         if( bGetMaskBand )
         {
@@ -2091,9 +2098,23 @@ CPLXMLNode *VRTComplexSource::SerializeToXML( const char *pszVRTPath )
     {
         if( CPLIsNan(m_dfNoDataValue) )
             CPLSetXMLValue( psSrc, "NODATA", "nan");
+        else if( m_poRasterBand->GetRasterDataType() == GDT_Float32 &&
+                 m_dfNoDataValue == -std::numeric_limits<float>::max() )
+        {
+            // To avoid rounding out of the range of float
+            CPLSetXMLValue( psSrc, "NODATA", "-3.4028234663852886e+38");
+        }
+        else if( m_poRasterBand->GetRasterDataType() == GDT_Float32 &&
+                 m_dfNoDataValue == std::numeric_limits<float>::max() )
+        {
+            // To avoid rounding out of the range of float
+            CPLSetXMLValue( psSrc, "NODATA", "3.4028234663852886e+38");
+        }
         else
+        {
             CPLSetXMLValue( psSrc, "NODATA",
                             CPLSPrintf("%.16g", m_dfNoDataValue) );
+        }
     }
 
     switch( m_eScalingType )
@@ -2229,6 +2250,10 @@ CPLErr VRTComplexSource::XMLInit( CPLXMLNode *psSrc, const char *pszVRTPath,
     {
         m_bNoDataSet = TRUE;
         m_dfNoDataValue = CPLAtofM( CPLGetXMLValue(psSrc, "NODATA", "0") );
+        if( m_poRasterBand->GetRasterDataType() == GDT_Float32 )
+        {
+            m_dfNoDataValue = GDALAdjustNoDataCloseToFloatMax(m_dfNoDataValue);
+        }
     }
 
     if( CPLGetXMLValue(psSrc, "LUT", nullptr) != nullptr )
@@ -2500,7 +2525,9 @@ CPLErr VRTComplexSource::RasterIOInternal( int nReqXOff, int nReqYOff,
     const bool bIsComplex = CPL_TO_BOOL( GDALDataTypeIsComplex(eBufType) );
     const int nWordSize = GDALGetDataTypeSizeBytes(eWrkDataType);
     const bool bNoDataSetIsNan = m_bNoDataSet && CPLIsNan(m_dfNoDataValue);
-    const bool bNoDataSetAndNotNan = m_bNoDataSet && !CPLIsNan(m_dfNoDataValue);
+    const bool bNoDataSetAndNotNan = m_bNoDataSet && !CPLIsNan(m_dfNoDataValue) &&
+                                GDALIsValueInRange<WorkingDT>(m_dfNoDataValue);
+    const auto fWorkingDataTypeNoData = static_cast<WorkingDT>(m_dfNoDataValue);
 
     WorkingDT *pafData = nullptr;
     if( m_eScalingType == VRT_SCALING_LINEAR &&
@@ -2582,8 +2609,7 @@ CPLErr VRTComplexSource::RasterIOInternal( int nReqXOff, int nReqYOff,
                 if( bNoDataSetIsNan && CPLIsNan(fResult) )
                     continue;
                 if( bNoDataSetAndNotNan &&
-                    GDALIsValueInRange<WorkingDT>(m_dfNoDataValue) &&
-                    ARE_REAL_EQUAL(fResult, static_cast<WorkingDT>(m_dfNoDataValue)) )
+                    ARE_REAL_EQUAL(fResult, fWorkingDataTypeNoData) )
                     continue;
 
                 if( m_nColorTableComponent )

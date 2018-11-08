@@ -680,6 +680,28 @@ def gml_MultiCurve_curveMembers():
     return 'success'
 
 ###############################################################################
+# Test GML MultiGeometry with geometryMembers
+
+def gml_MultiGeometry_geometryMembers():
+
+    gml = """<gml:MultiGeometry xmlns:foo="http://bar">
+          <gml:geometryMembers xmlns:foo="http://bar">
+            <gml:LineString xmlns:foo="http://bar">
+                <gml:posList xmlns:foo="http://bar" srsDimension="2">0 0 1 1</gml:posList>
+              </gml:LineString>
+            </gml:geometryMembers>
+          </gml:MultiGeometry>"""
+
+    geom = ogr.CreateGeometryFromGML(gml)
+
+    if geom.ExportToWkt() != 'GEOMETRYCOLLECTION (LINESTRING (0 0,1 1))':
+        gdaltest.post_reason('<gml:MultiGeometry> not correctly parsed')
+        print(geom.ExportToWkt())
+        return 'fail'
+
+    return 'success'
+
+###############################################################################
 # Test GML CompositeCurve with curveMembers
 
 
@@ -1288,6 +1310,7 @@ def gml_invalid_geoms():
         ('<gml:MultiGeometry><foo/></gml:MultiGeometry>', 'GEOMETRYCOLLECTION EMPTY'),
         ('<gml:MultiGeometry><gml:geometryMember/></gml:MultiGeometry>', 'GEOMETRYCOLLECTION EMPTY'),  # valid in GML3 (accepted by PostGIS too)
         ('<gml:MultiGeometry><gml:geometryMember><foo/></gml:geometryMember></gml:MultiGeometry>', None),
+        ('<gml:MultiGeometry><gml:geometryMembers><foo/></gml:geometryMembers></gml:MultiGeometry>', None),
         ('<gml:Surface/>', 'POLYGON EMPTY'),  # valid GML3
         ('<gml:Surface><foo/></gml:Surface>', 'POLYGON EMPTY'),  # invalid GML3, but we are tolerant
         ('<gml:Surface><gml:patches/></gml:Surface>', 'POLYGON EMPTY'),  # valid GML3
@@ -2447,6 +2470,7 @@ gdaltest_list.append(gml_MultiCurve)
 gdaltest_list.append(gml_MultiSurface)
 gdaltest_list.append(gml_MultiSurface_surfaceMembers)
 gdaltest_list.append(gml_MultiCurve_curveMembers)
+gdaltest_list.append(gml_MultiGeometry_geometryMembers)
 gdaltest_list.append(gml_CompositeCurve_curveMembers)
 gdaltest_list.append(gml_MultiCurve_pointMembers)
 gdaltest_list.append(gml_Solid)
