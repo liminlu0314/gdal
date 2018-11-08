@@ -161,7 +161,7 @@ static void CEMTransformPoint(GDALCEMInfo *psCEM,
 	double dfMapX, double dfMapY, double dfHeight,
 	double *pdfPixel, double *pdfLine)
 {
-	double adfPhi[3], adfOmega[3], adfKappa[3]; //Íâ·½Î»ÔªËØ
+	double adfPhi[3], adfOmega[3], adfKappa[3]; //å¤–æ–¹ä½å…ƒç´ 
 	memcpy(adfOmega, psCEM->adfOmega, sizeof(double) * 3);
 	memcpy(adfPhi, psCEM->adfPhi, sizeof(double) * 3);
 	memcpy(adfKappa, psCEM->adfKappa, sizeof(double) * 3);
@@ -255,26 +255,26 @@ typedef struct {
  * GDAL CEM Metadata has the following entries
  *
  * <ul>
- * <li>DISTORTION_K1: ¾¶Ïò»û±ä²ÎÊýK1
- * <li>DISTORTION_K2: ¾¶Ïò»û±ä²ÎÊýK2
- * <li>DISTORTION_K3: ¾¶Ïò»û±ä²ÎÊýK3
- * <li>DISTORTION_P1: ÇÐÏò»û±ä²ÎÊýP1
- * <li>DISTORTION_P2: ÇÐÏò»û±ä²ÎÊýP2
- * <li>DISTORTION_ALPHA: ÏñËØµÄ·ÇÕý·½ÐÎ±ÈÀýÒò×Ó
- * <li>DISTORTION_BETA: CCDÕóÁÐÅÅÁÐ·ÇÕý½»ÐÔÎó²îÏµÊý
- * <li>FOCAL_LENGTH: ½¹¾à
- * <li>PRINCIPAL_X0: ÏñÖ÷µã x0
- * <li>PRINCIPAL_Y0: ÏñÖ÷µã y0
+ * <li>DISTORTION_K1: å¾„å‘ç•¸å˜å‚æ•°K1
+ * <li>DISTORTION_K2: å¾„å‘ç•¸å˜å‚æ•°K2
+ * <li>DISTORTION_K3: å¾„å‘ç•¸å˜å‚æ•°K3
+ * <li>DISTORTION_P1: åˆ‡å‘ç•¸å˜å‚æ•°P1
+ * <li>DISTORTION_P2: åˆ‡å‘ç•¸å˜å‚æ•°P2
+ * <li>DISTORTION_ALPHA: åƒç´ çš„éžæ­£æ–¹å½¢æ¯”ä¾‹å› å­
+ * <li>DISTORTION_BETA: CCDé˜µåˆ—æŽ’åˆ—éžæ­£äº¤æ€§è¯¯å·®ç³»æ•°
+ * <li>FOCAL_LENGTH: ç„¦è·
+ * <li>PRINCIPAL_X0: åƒä¸»ç‚¹ x0
+ * <li>PRINCIPAL_Y0: åƒä¸»ç‚¹ y0
  * <li>PXIEL_XSIZE: x pixel size
  * <li>PXIEL_YSIZE: y pixel size
- * <li>EXTERIOR_XS: ÉãÓ°ÖÐÐÄ×ø±êX
- * <li>EXTERIOR_YS: ÉãÓ°ÖÐÐÄ×ø±êY
- * <li>EXTERIOR_ZS: ÉãÓ°ÖÐÐÄ×ø±êZ
- * <li>EXTERIOR_OMEGA: Ðý×ª½Ç¶ÈOmega(space separated)
- * <li>EXTERIOR_PHI:   Ðý×ª½Ç¶ÈPhi(space separated)
- * <li>EXTERIOR_KAPPA: Ðý×ª½Ç¶ÈKappa(space separated)
- * <li>ANGLE_TYPE: ×ª½ÇÀàÐÍ
- * <li>ANGLE_ORDER: ×ª½Ç´ÎÊý
+ * <li>EXTERIOR_XS: æ‘„å½±ä¸­å¿ƒåæ ‡X
+ * <li>EXTERIOR_YS: æ‘„å½±ä¸­å¿ƒåæ ‡Y
+ * <li>EXTERIOR_ZS: æ‘„å½±ä¸­å¿ƒåæ ‡Z
+ * <li>EXTERIOR_OMEGA: æ—‹è½¬è§’åº¦Omega(space separated)
+ * <li>EXTERIOR_PHI:   æ—‹è½¬è§’åº¦Phi(space separated)
+ * <li>EXTERIOR_KAPPA: æ—‹è½¬è§’åº¦Kappa(space separated)
+ * <li>ANGLE_TYPE: è½¬è§’ç±»åž‹
+ * <li>ANGLE_ORDER: è½¬è§’æ¬¡æ•°
  * </ul>
  *
  * The transformer normally maps from pixel/line/height to mapx/mapy/height space
@@ -812,21 +812,21 @@ int GDALCEMTransform(void *pTransformArg, int bDstToSrc,
 				}
 
 				double dfSumH(0);
-				for (int i = 0; i < 4; i++)
+				for (int r = 0; r < 4; r++)
 				{
 					// Loop across the X axis
-					for (int j = 0; j < 4; j++)
+					for (int c = 0; c < 4; c++)
 					{
 						// Calculate the weight for the specified pixel according
 						// to the bicubic b-spline kernel we're using for
 						// interpolation
-						int dKernIndX = j - 1;
-						int dKernIndY = i - 1;
+						int dKernIndX = c - 1;
+						int dKernIndY = r - 1;
 						double dfPixelWeight = BiCubicKernel(dKernIndX - dfDeltaX) * BiCubicKernel(dKernIndY - dfDeltaY);
 
 						// Create a sum of all values
 						// adjusted for the pixel's calculated weight
-						dfSumH += anElevData[j + i * 4] * dfPixelWeight;
+						dfSumH += anElevData[c + r * 4] * dfPixelWeight;
 					}
 				}
 				dfDEMH = dfSumH;
