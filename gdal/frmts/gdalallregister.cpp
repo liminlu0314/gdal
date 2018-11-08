@@ -377,6 +377,7 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_mbtiles
     GDALRegister_MBTiles();
+    GDALRegister_TFATMBTiles();
 #endif
 
 #ifdef FRMT_plmosaic

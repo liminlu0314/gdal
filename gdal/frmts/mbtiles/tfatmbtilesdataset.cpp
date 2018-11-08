@@ -563,7 +563,7 @@ int TfatMBTilesDataset::CloseDependentDatasets()
 
 		if (pHDS != NULL)
 		{
-			for (int i=0; i<nMBTilesCount; i++)
+			for (i=0; i<nMBTilesCount; i++)
 			{
 				if(pHDS[i] != NULL)
 					OGRReleaseDataSource(pHDS[i]);
@@ -652,7 +652,7 @@ void TfatMBTilesDataset::ComputeTileColTileRowZoomLevel(int nBlockXOff,
 /*                          GetGeoTransform()                           */
 /************************************************************************/
 
-#define MAX_GM 20037508.3427892	//°ë¸ö³àµÀµÄ³¤¶È
+#define MAX_GM 20037508.3427892	//åŠä¸ªèµ¤é“çš„é•¿åº¦
 
 CPLErr TfatMBTilesDataset::GetGeoTransform(double* padfGeoTransform)
 {
@@ -668,7 +668,7 @@ CPLErr TfatMBTilesDataset::GetGeoTransform(double* padfGeoTransform)
     }
     else
     {
-        int nMaxTileRow = nMinTileRow + ceil(nRasterYSize / 256.0);
+        int nMaxTileRow = nMinTileRow + static_cast<int>(ceil(nRasterYSize / 256.0));
 
 		double dStep = 360.0 / (1 << nMaxLevel);
 		padfGeoTransform[0] = -180.0 + dStep * nMinTileCol;
