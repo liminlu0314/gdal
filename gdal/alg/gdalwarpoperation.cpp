@@ -645,20 +645,24 @@ void* GDALWarpOperation::CreateDestinationBuffer(
 /*      Allocate block of memory large enough to hold all the bands     */
 /*      for this block.                                                 */
 /* -------------------------------------------------------------------- */
-    const int nWordSize = GDALGetDataTypeSizeBytes(psOptions->eWorkingDataType);
-    const int nBandSize = nWordSize * nDstXSize * nDstYSize;
+    const GIntBig nWordSize = GDALGetDataTypeSizeBytes(psOptions->eWorkingDataType);
+    const GIntBig nBandSize = nWordSize * nDstXSize * nDstYSize;
 
-    const int knIntMax = std::numeric_limits<int>::max();
-    if( nDstXSize > knIntMax / nDstYSize ||
-        nDstXSize * nDstYSize > knIntMax / (nWordSize * psOptions->nBandCount) )
+    const GIntBig nBytes = nBandSize * psOptions->nBandCount;
+    const size_t nByteSize_t = static_cast<size_t>(nBytes);
+
+#if SIZEOF_VOIDP != 8
+    if (static_cast<GIntBig>(nByteSize_t) != nBytes)
     {
-        CPLError( CE_Failure, CPLE_AppDefined,
-                  "Integer overflow : nDstXSize=%d, nDstYSize=%d",
-                  nDstXSize, nDstYSize);
-        return nullptr;
+        CPLError(
+            CE_Failure, CPLE_OutOfMemory,
+            "Cannot allocate " CPL_FRMT_GIB " bytes",
+            nBytes);
+        return CE_Failure;
     }
+#endif
 
-    void *pDstBuffer = VSI_MALLOC_VERBOSE( nBandSize * psOptions->nBandCount );
+    void *pDstBuffer = VSI_MALLOC_VERBOSE( nByteSize_t );
     if( pDstBuffer == nullptr )
     {
         return nullptr;
@@ -1817,23 +1821,29 @@ CPLErr GDALWarpOperation::WarpRegionToBuffer(
     oWK.dfSrcXExtraSize = dfSrcXExtraSize;
     oWK.dfSrcYExtraSize = dfSrcYExtraSize;
 
-    const int knIntMax = std::numeric_limits<int>::max();
-    if( nSrcXSize != 0 && nSrcYSize != 0 &&
-        (nSrcXSize > knIntMax / nSrcYSize ||
-         nSrcXSize * nSrcYSize >
-         knIntMax / (nWordSize * psOptions->nBandCount) - WARP_EXTRA_ELTS) )
+    size_t nByteSize_t = 0;
+    if( nSrcXSize != 0 && nSrcYSize != 0 )
     {
-        CPLError( CE_Failure, CPLE_AppDefined,
-                  "Integer overflow : nSrcXSize=%d, nSrcYSize=%d",
-                  nSrcXSize, nSrcYSize);
-        return CE_Failure;
+        const GIntBig nBandSize = static_cast<GIntBig>(nSrcXSize) * nSrcYSize + WARP_EXTRA_ELTS;
+        const GIntBig nBytes = nBandSize * nWordSize * psOptions->nBandCount;
+       nByteSize_t = static_cast<size_t>(nBytes);
+
+#if SIZEOF_VOIDP != 8
+        if (static_cast<GIntBig>(nByteSize_t) != nBytes)
+        {
+            CPLError(
+                CE_Failure, CPLE_OutOfMemory,
+                "Cannot allocate " CPL_FRMT_GIB " bytes",
+                nBytes);
+            return CE_Failure;
+        }
+#endif
     }
 
     oWK.papabySrcImage = static_cast<GByte **>(
         CPLCalloc(sizeof(GByte*), psOptions->nBandCount));
     oWK.papabySrcImage[0] = static_cast<GByte *>(
-        VSI_MALLOC_VERBOSE(nWordSize * (nSrcXSize * nSrcYSize + WARP_EXTRA_ELTS)
-                           * psOptions->nBandCount));
+        VSI_MALLOC_VERBOSE(nByteSize_t);
 
     CPLErr eErr =
         nSrcXSize != 0 && nSrcYSize != 0 && oWK.papabySrcImage[0] == nullptr
