@@ -6,7 +6,7 @@
  *******************************************************************************
  *  The MIT License (MIT)
  *
- *  Copyright (c) 2018, NextGIS
+ *  Copyright (c) 2018-2019, NextGIS
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -65,7 +65,8 @@ OGRNGWDataset::OGRNGWDataset() :
     poRasterDS(nullptr),
     nRasters(0),
     nCacheExpires(604800),  // 7 days
-    nCacheMaxSize(67108864) // 64 MB
+    nCacheMaxSize(67108864),// 64 MB
+    osJsonDepth("32")
 {}
 
 /*
@@ -198,6 +199,9 @@ bool OGRNGWDataset::Open( const std::string &osUrlIn,
     bExtInNativeData = CPLFetchBool( papszOpenOptionsIn, "NATIVE_DATA",
         CPLTestBool( CPLGetConfigOption("NGW_NATIVE_DATA", "NO") ) );
 
+    osJsonDepth = CSLFetchNameValueDef( papszOpenOptionsIn, "JSON_DEPTH",
+        CPLGetConfigOption("NGW_JSON_DEPTH", "32"));
+
     return Init( nOpenFlagsIn );
 }
 
@@ -240,6 +244,9 @@ bool OGRNGWDataset::Init(int nOpenFlagsIn)
     bool bResult = oResourceDetailsReq.LoadUrl( NGWAPI::GetResource( osUrl,
         osResourceId ), papszHTTPOptions );
 
+    CPLDebug("NGW", "Get resource %s details %s", osResourceId.c_str(),
+        bResult ? "success" : "failed");
+
     if( bResult )
     {
         CPLJSONObject oRoot = oResourceDetailsReq.GetRoot();
@@ -266,11 +273,10 @@ bool OGRNGWDataset::Init(int nOpenFlagsIn)
                 // Add vector layer.
                 AddLayer( oRoot, papszHTTPOptions, nOpenFlagsIn );
             }
-            else if( ( osResourceType == "mapserver_style" ||
+            else if( osResourceType == "mapserver_style" ||
                 osResourceType == "qgis_vector_style" ||
                 osResourceType == "raster_style" ||
-                osResourceType == "wmsclient_layer") &&
-                nOpenFlagsIn & GDAL_OF_RASTER )
+                osResourceType == "wmsclient_layer" )
             {
                 // GetExtent from parent.
                 OGREnvelope stExtent;
@@ -392,8 +398,7 @@ bool OGRNGWDataset::Init(int nOpenFlagsIn)
                     bResult = false;
                 }
             }
-            else if( osResourceType == "raster_layer" &&
-                nOpenFlagsIn & GDAL_OF_RASTER )
+            else if( osResourceType == "raster_layer" ) //FIXME: Do we need this check? && nOpenFlagsIn & GDAL_OF_RASTER )
             {
                 AddRaster( oRoot, papszHTTPOptions );
             }
@@ -432,7 +437,7 @@ bool OGRNGWDataset::FillResources( char **papszOptions, int nOpenFlagsIn )
                 AddLayer( oChild, papszOptions, nOpenFlagsIn );
             }
             else if( (osResourceType == "raster_layer" ||
-                osResourceType == "wmsclient_layer") & nOpenFlagsIn & GDAL_OF_RASTER )
+                osResourceType == "wmsclient_layer") && nOpenFlagsIn & GDAL_OF_RASTER )
             {
                 AddRaster( oChild, papszOptions );
             }
@@ -527,6 +532,9 @@ void OGRNGWDataset::AddRaster( const CPLJSONObject &oRasterJsonObj,
             osOutResourceName = "raster_" + osOutResourceId;
         }
 
+        CPLDebug("NGW", "Add raster %s: %s", osOutResourceId.c_str(),
+            osOutResourceName.c_str());
+
         GDALDataset::SetMetadataItem( CPLSPrintf("SUBDATASET_%d_NAME", nRasters),
             CPLSPrintf("NGW:%s/resource/%s", osUrl.c_str(),
             osOutResourceId.c_str()), "SUBDATASETS" );
@@ -590,7 +598,7 @@ OGRLayer *OGRNGWDataset::ICreateLayer( const char *pszNameIn,
     }
 
     // Do we already have this layer?  If so, should we blow it away?
-    bool bOverwrite = CPLFetchBool(papszOptions, "OVERWRITE", "NO");
+    bool bOverwrite = CPLFetchBool(papszOptions, "OVERWRITE", false);
     for( int iLayer = 0; iLayer < nLayers; ++iLayer )
     {
         if( EQUAL(pszNameIn, papoLayers[iLayer]->GetName()) )
@@ -688,6 +696,16 @@ void OGRNGWDataset::FillMetadata( const CPLJSONObject &oRootObject )
     {
         GDALDataset::SetMetadataItem( "description", osDescription.c_str() );
     }
+    std::string osResourceType = oRootObject.GetString("resource/cls");
+    if( !osResourceType.empty() )
+    {
+        GDALDataset::SetMetadataItem( "resource_type", osResourceType.c_str() );
+    }
+    std::string osResourceParentId = oRootObject.GetString("resource/parent/id");
+    if( !osResourceParentId.empty() )
+    {
+        GDALDataset::SetMetadataItem( "parent_id", osResourceParentId.c_str() );
+    }
     GDALDataset::SetMetadataItem( "id", osResourceId.c_str() );
 
     std::vector<CPLJSONObject> items =
@@ -776,6 +794,7 @@ char **OGRNGWDataset::GetHeaders() const
 {
     char **papszOptions = nullptr;
     papszOptions = CSLAddString(papszOptions, "HEADERS=Accept: */*");
+    papszOptions = CSLAddNameValue(papszOptions, "JSON_DEPTH", osJsonDepth.c_str());
     if( !osUserPwd.empty() )
     {
         papszOptions = CSLAddString(papszOptions, "HTTPAUTH=BASIC");
@@ -787,6 +806,116 @@ char **OGRNGWDataset::GetHeaders() const
 }
 
 /*
+ * SQLUnescape()
+ * Get from gdal/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp as we don't want
+ * depenency on sqlite
+ */
+static CPLString SQLUnescape( const char *pszVal )
+{
+    char chQuoteChar = pszVal[0];
+    if( chQuoteChar != '\'' && chQuoteChar != '"' )
+        return pszVal;
+
+    CPLString osRet;
+    pszVal ++;
+    while( *pszVal != '\0' )
+    {
+        if( *pszVal == chQuoteChar )
+        {
+            if( pszVal[1] == chQuoteChar )
+                pszVal ++;
+            else
+                break;
+        }
+        osRet += *pszVal;
+        pszVal ++;
+    }
+    return osRet;
+}
+
+/*
+ * SQLTokenize()
+ * Get from gdal/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp as we don't want
+ * depenency on sqlite
+ */
+static char **SQLTokenize( const char *pszStr )
+{
+    char** papszTokens = nullptr;
+    bool bInQuote = false;
+    char chQuoteChar = '\0';
+    bool bInSpace = true;
+    CPLString osCurrentToken;
+    while( *pszStr != '\0' )
+    {
+        if( *pszStr == ' ' && !bInQuote )
+        {
+            if( !bInSpace )
+            {
+                papszTokens = CSLAddString(papszTokens, osCurrentToken);
+                osCurrentToken.clear();
+            }
+            bInSpace = true;
+        }
+        else if( (*pszStr == '(' || *pszStr == ')' || *pszStr == ',')  && !bInQuote )
+        {
+            if( !bInSpace )
+            {
+                papszTokens = CSLAddString(papszTokens, osCurrentToken);
+                osCurrentToken.clear();
+            }
+            osCurrentToken.clear();
+            osCurrentToken += *pszStr;
+            papszTokens = CSLAddString(papszTokens, osCurrentToken);
+            osCurrentToken.clear();
+            bInSpace = true;
+        }
+        else if( *pszStr == '"' || *pszStr == '\'' )
+        {
+            if( bInQuote && *pszStr == chQuoteChar && pszStr[1] == chQuoteChar )
+            {
+                osCurrentToken += *pszStr;
+                osCurrentToken += *pszStr;
+                pszStr += 2;
+                continue;
+            }
+            else if( bInQuote && *pszStr == chQuoteChar )
+            {
+                osCurrentToken += *pszStr;
+                papszTokens = CSLAddString(papszTokens, osCurrentToken);
+                osCurrentToken.clear();
+                bInSpace = true;
+                bInQuote = false;
+                chQuoteChar = '\0';
+            }
+            else if( bInQuote )
+            {
+                osCurrentToken += *pszStr;
+            }
+            else
+            {
+                chQuoteChar = *pszStr;
+                osCurrentToken.clear();
+                osCurrentToken += chQuoteChar;
+                bInQuote = true;
+                bInSpace = false;
+            }
+        }
+        else
+        {
+            osCurrentToken += *pszStr;
+            bInSpace = false;
+        }
+        pszStr ++;
+    }
+
+    if( !osCurrentToken.empty() )
+        papszTokens = CSLAddString(papszTokens, osCurrentToken);
+
+    return papszTokens;
+}
+
+
+/*
  * ExecuteSQL()
  */
 OGRLayer *OGRNGWDataset::ExecuteSQL( const char *pszStatement,
@@ -796,9 +925,9 @@ OGRLayer *OGRNGWDataset::ExecuteSQL( const char *pszStatement,
     CPLString osStatement(pszStatement);
     osStatement = osStatement.Trim().replaceAll("  ", " ");
 
-    if( STARTS_WITH_CI(osStatement.c_str(), "DELLAYER:") )
+    if( STARTS_WITH_CI(osStatement, "DELLAYER:") )
     {
-        CPLString osLayerName = osStatement.substr(9);
+        CPLString osLayerName = osStatement.substr(strlen("DELLAYER:"));
         if( osLayerName.endsWith(";") )
         {
             osLayerName = osLayerName.substr(0, osLayerName.size() - 1);
@@ -809,19 +938,22 @@ OGRLayer *OGRNGWDataset::ExecuteSQL( const char *pszStatement,
 
         for( int iLayer = 0; iLayer < nLayers; ++iLayer )
         {
-            if( EQUAL(papoLayers[iLayer]->GetName(), osLayerName.c_str() ) )
+            if( EQUAL(papoLayers[iLayer]->GetName(), osLayerName ) )
             {
                 DeleteLayer( iLayer );
-                break;
+                return nullptr;
             }
         }
+        CPLError(CE_Failure, CPLE_AppDefined, "Unknown layer : %s",
+            osLayerName.c_str());
+
         return nullptr;
     }
 
-    if( STARTS_WITH_CI(osStatement.c_str(), "DELETE FROM") )
+    if( STARTS_WITH_CI(osStatement, "DELETE FROM") )
     {
         // Get layer name from pszStatement DELETE FROM layer;.
-        CPLString osLayerName = osStatement.substr(12);
+        CPLString osLayerName = osStatement.substr(strlen("DELETE FROM "));
         if( osLayerName.endsWith(";") )
         {
             osLayerName = osLayerName.substr(0, osLayerName.size() - 1);
@@ -842,6 +974,175 @@ OGRLayer *OGRNGWDataset::ExecuteSQL( const char *pszStatement,
         }
         return nullptr;
     }
+
+    if( STARTS_WITH_CI(osStatement, "DROP TABLE") )
+    {
+        // Get layer name from pszStatement DELETE FROM layer;.
+        CPLString osLayerName = osStatement.substr(strlen("DROP TABLE "));
+        if( osLayerName.endsWith(";") )
+        {
+            osLayerName = osLayerName.substr(0, osLayerName.size() - 1);
+            osLayerName.Trim();
+        }
+
+        CPLDebug("NGW", "Delete layer with name %s.", osLayerName.c_str());
+
+        for( int iLayer = 0; iLayer < nLayers; ++iLayer )
+        {
+            if( EQUAL(papoLayers[iLayer]->GetName(), osLayerName ) )
+            {
+                DeleteLayer( iLayer );
+                return nullptr;
+            }
+        }
+
+        CPLError(CE_Failure, CPLE_AppDefined, "Unknown layer : %s",
+            osLayerName.c_str());
+
+        return nullptr;
+    }
+
+    if( STARTS_WITH_CI(osStatement, "ALTER TABLE ") )
+    {
+        if( osStatement.endsWith(";") )
+        {
+            osStatement = osStatement.substr(0, osStatement.size() - 1);
+            osStatement.Trim();
+        }
+
+        CPLStringList aosTokens( SQLTokenize(osStatement) );
+        /* ALTER TABLE src_table RENAME TO dst_table */
+        if( aosTokens.size() == 6 && EQUAL(aosTokens[3], "RENAME") &&
+            EQUAL(aosTokens[4], "TO") )
+        {
+            const char* pszSrcTableName = aosTokens[2];
+            const char* pszDstTableName = aosTokens[5];
+
+            OGRNGWLayer *poLayer = static_cast<OGRNGWLayer*>(GetLayerByName(
+                SQLUnescape(pszSrcTableName) ));
+            if( poLayer )
+            {
+                poLayer->Rename( SQLUnescape(pszDstTableName) );
+                return nullptr;
+            }
+
+            CPLError(CE_Failure, CPLE_AppDefined, "Unknown layer : %s",
+                pszSrcTableName);
+        }
+        else
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                "Unsupported alter table operation. Only rename table to ... support.");
+        }
+        return nullptr;
+    }
+
+    // SELECT xxxxx FROM yyyy WHERE zzzzzz;
+    if( STARTS_WITH_CI(osStatement, "SELECT ") )
+    {
+        swq_select oSelect;
+        CPLDebug("NGW", "Select statement: %s", osStatement.c_str());
+        if( oSelect.preparse( osStatement ) != CE_None )
+        {
+            return nullptr;
+        }
+
+        if( oSelect.join_count == 0 && oSelect.poOtherSelect == nullptr &&
+            oSelect.table_count == 1 && oSelect.order_specs == 0 )
+        {
+            OGRNGWLayer *poLayer = reinterpret_cast<OGRNGWLayer*>(
+                GetLayerByName( oSelect.table_defs[0].table_name ) );
+            if( nullptr == poLayer )
+            {
+                CPLError(CE_Failure, CPLE_AppDefined,
+                    "Layer %s not found in dataset.", oSelect.table_defs[0].table_name);
+                return nullptr;
+            }
+
+            std::set<std::string> aosFields;
+            bool bSkip = false;
+            for( int i = 0; i < oSelect.result_columns; ++i )
+            {
+                swq_col_func col_func = oSelect.column_defs[i].col_func;
+                if( col_func != SWQCF_NONE )
+                {
+                    bSkip = true;
+                    break;
+                }
+
+                if( oSelect.column_defs[i].distinct_flag )
+                {
+                    CPLError(CE_Warning, CPLE_AppDefined,
+                        "Distinct not supported.");
+                    bSkip = true;
+                    break;
+                }
+
+                if( oSelect.column_defs[i].field_name != nullptr )
+                {
+                    if( EQUAL(oSelect.column_defs[i].field_name, "*") )
+                    {
+                        aosFields.clear();
+                        aosFields.emplace( oSelect.column_defs[i].field_name );
+                        break;
+                    }
+                    else
+                    {
+                        aosFields.emplace( oSelect.column_defs[i].field_name );
+                    }
+                }
+            }
+
+            std::string osNgwSelect;
+            if( oSelect.where_expr != nullptr )
+            {
+                osNgwSelect = OGRNGWLayer::TranslateSQLToFilter(
+                    oSelect.where_expr);
+                if( osNgwSelect.empty() )
+                {
+                    bSkip = true;
+                }
+            }
+
+            if( !bSkip )
+            {
+                if( aosFields.empty() )
+                {
+                    CPLError(CE_Failure, CPLE_AppDefined,
+                        "SELECT statement is invalid: field list is empty.");
+                    return nullptr;
+                }
+
+                if( poLayer->SyncToDisk() != OGRERR_NONE )
+                {
+                    return nullptr;
+                }
+
+                OGRNGWLayer *poOutLayer = poLayer->Clone();
+                if( aosFields.size() == 1 && *(aosFields.begin()) == "*" )
+                {
+                    poOutLayer->SetIgnoredFields(nullptr);
+                }
+                else
+                {
+                    poOutLayer->SetSelectedFields(aosFields);
+                }
+                poOutLayer->SetSpatialFilter(poSpatialFilter);
+
+                if( osNgwSelect.empty() ) // If we here oSelect.where_expr is empty
+                {
+                    poOutLayer->SetAttributeFilter(nullptr);
+                }
+                else
+                {
+                    std::string osAttributeFilte = "NGW:" + osNgwSelect;
+                    poOutLayer->SetAttributeFilter(osAttributeFilte.c_str());
+                }
+                return poOutLayer;
+            }
+        }
+    }
+
     return GDALDataset::ExecuteSQL(pszStatement, poSpatialFilter, pszDialect);
 }
 
@@ -914,14 +1215,19 @@ CPLErr OGRNGWDataset::IRasterIO( GDALRWFlag eRWFlag, int nXOff, int nYOff,
  */
 void OGRNGWDataset::FillCapabilities( char **papszOptions )
 {
+    // Check NGW version. Paging available from 3.1
     CPLJSONDocument oRouteReq;
-    if( oRouteReq.LoadUrl( NGWAPI::GetRoute(osUrl), papszOptions ) )
+    if( oRouteReq.LoadUrl( NGWAPI::GetVersion(osUrl), papszOptions ) )
     {
         CPLJSONObject oRoot = oRouteReq.GetRoot();
 
         if( oRoot.IsValid() )
         {
-            // TODO: check bHasFeaturePaging
+            std::string osVersion = oRoot.GetString("nextgisweb", "0.0");
+            bHasFeaturePaging = NGWAPI::CheckVersion(osVersion, 3, 1);
+
+            CPLDebug("NGW", "Is feature paging supported: %s",
+                bHasFeaturePaging ? "yes" : "no");
         }
     }
 }

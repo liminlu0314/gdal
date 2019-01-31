@@ -6,7 +6,7 @@
  *******************************************************************************
  *  The MIT License (MIT)
  *
- *  Copyright (c) 2018, NextGIS
+ *  Copyright (c) 2018-2019, NextGIS
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -59,15 +59,100 @@ std::string GetTMS(const std::string &osUrl, const std::string &osResourceId)
         osResourceId;
 }
 
-std::string GetFeaturePage(CPL_UNUSED const std::string &osUrl, CPL_UNUSED const std::string &osResourceId,
-    CPL_UNUSED GIntBig nStart, CPL_UNUSED int nCount)
+std::string GetFeaturePage(const std::string &osUrl, const std::string &osResourceId,
+    GIntBig nStart, int nCount, const std::string &osFields,
+    const std::string &osWhere, const std::string &osSpatialWhere)
 {
-    return ""; // TODO: Add paging support.
+    std::string osFeatureUrl = GetFeature(osUrl, osResourceId);
+    bool bParamAdd = false;
+    if(nCount > 0)
+    {
+        osFeatureUrl += "?offset=" + std::to_string(nStart) + "&limit=" +
+            std::to_string(nCount);
+        bParamAdd = true;
+    }
+
+    if(!osFields.empty())
+    {
+        if(bParamAdd)
+        {
+            osFeatureUrl += "&fields=" + osFields;
+        }
+        else
+        {
+            osFeatureUrl += "?fields=" + osFields;
+            bParamAdd = true;
+        }
+    }
+
+    if(!osWhere.empty())
+    {
+        if(bParamAdd)
+        {
+            osFeatureUrl += "&" + osWhere;
+        }
+        else
+        {
+            osFeatureUrl += "?" + osWhere;
+            bParamAdd = true;
+        }
+    }
+
+    if(!osSpatialWhere.empty())
+    {
+        if(bParamAdd)
+        {
+            osFeatureUrl += "&intersects=" + osSpatialWhere;
+        }
+        else
+        {
+            osFeatureUrl += "?intersects=" + osSpatialWhere;
+        }
+    }
+
+    return osFeatureUrl;
 }
 
 std::string GetRoute(const std::string &osUrl)
 {
     return osUrl + "/api/component/pyramid/route";
+}
+
+std::string GetUpload(const std::string &osUrl)
+{
+    return osUrl + "/api/component/file_upload/upload";
+}
+
+std::string GetVersion(const std::string &osUrl)
+{
+    return osUrl + "/api/component/pyramid/pkg_version";
+}
+
+bool CheckVersion(const std::string &osVersion, int nMajor, int nMinor, int nPatch)
+{
+    int nCurrentMajor(0);
+    int nCurrentMinor(0);
+    int nCurrentPatch(0);
+
+    CPLStringList aosList(CSLTokenizeString2(osVersion.c_str(), ".", 0));
+    if(aosList.size() > 2)
+    {
+        nCurrentMajor = atoi(aosList[0]);
+        nCurrentMinor = atoi(aosList[1]);
+        nCurrentPatch = atoi(aosList[2]);
+    }
+    else if(aosList.size() > 1)
+    {
+        nCurrentMajor = atoi(aosList[0]);
+        nCurrentMinor = atoi(aosList[1]);
+    }
+    else if(aosList.size() > 0)
+    {
+        nCurrentMajor = atoi(aosList[0]);
+    }
+
+    return nCurrentMajor >= nMajor && nCurrentMinor >= nMinor &&
+        nCurrentPatch >= nPatch;
 }
 
 Uri ParseUri(const std::string &osUrl)
@@ -118,9 +203,12 @@ static void ReportError(const GByte *pabyData, int nDataLen)
             if( !osErrorMessage.empty() )
             {
                 CPLError(CE_Failure, CPLE_AppDefined, "%s", osErrorMessage.c_str());
+                return;
             }
         }
     }
+
+    CPLError(CE_Failure, CPLE_AppDefined, "Unexpected error occurred.");
 }
 
 std::string CreateResource(const std::string &osUrl, const std::string &osPayload,
@@ -134,7 +222,7 @@ std::string CreateResource(const std::string &osUrl, const std::string &osPayloa
     papszHTTPOptions = CSLAddString( papszHTTPOptions,
         "HEADERS=Content-Type: application/json\r\nAccept: */*" );
 
-    CPLDebug("NGW", "UpdateResource request payload: %s", osPayload.c_str());
+    CPLDebug("NGW", "CreateResource request payload: %s", osPayload.c_str());
 
     CPLJSONDocument oCreateReq;
     bool bResult = oCreateReq.LoadUrl( GetResource( osUrl, "" ),
@@ -190,7 +278,7 @@ bool UpdateResource(const std::string &osUrl, const std::string &osResourceId,
     }
     else
     {
-        CPLError(CE_Failure, CPLE_AppDefined, "Update resource #%s failed",
+        CPLError(CE_Failure, CPLE_AppDefined, "Update resource %s failed",
             osResourceId.c_str());
     }
     return bResult;
@@ -223,7 +311,7 @@ bool RenameResource(const std::string &osUrl, const std::string &osResourceId,
 {
     CPLJSONObject oPayload;
     CPLJSONObject oResource("resource", oPayload);
-    oPayload.Add("display_name", osNewName);
+    oResource.Add("display_name", osNewName);
     std::string osPayload = oPayload.Format(CPLJSONObject::Plain);
 
     return UpdateResource( osUrl, osResourceId, osPayload, papszHTTPOptions);
@@ -533,9 +621,10 @@ bool UpdateFeature(const std::string &osUrl, const std::string &osResourceId,
     return bResult;
 }
 
-bool PatchFeatures(const std::string &osUrl, const std::string &osResourceId,
+std::vector<GIntBig> PatchFeatures(const std::string &osUrl, const std::string &osResourceId,
     const std::string &osFeaturesJson, char **papszHTTPOptions)
 {
+    std::vector<GIntBig> aoFIDs;
     CPLErrorReset();
     std::string osPayloadInt = "POSTFIELDS=" + osFeaturesJson;
 
@@ -544,24 +633,40 @@ bool PatchFeatures(const std::string &osUrl, const std::string &osResourceId,
     papszHTTPOptions = CSLAddString( papszHTTPOptions,
         "HEADERS=Content-Type: application/json\r\nAccept: */*" );
 
-    CPLDebug("NGW", "UpdateFeature request payload: %s", osFeaturesJson.c_str());
+    CPLDebug("NGW", "PatchFeatures request payload: %s", osFeaturesJson.c_str());
 
     std::string osUrlInt = GetFeature(osUrl, osResourceId);
-    CPLHTTPResult *psResult = CPLHTTPFetch( osUrlInt.c_str(), papszHTTPOptions );
+    CPLJSONDocument oPatchFeatureReq;
+    bool bResult = oPatchFeatureReq.LoadUrl( osUrlInt, papszHTTPOptions );
     CSLDestroy( papszHTTPOptions );
-    bool bResult = false;
-    if( psResult )
-    {
-        bResult = psResult->nStatus == 0 && psResult->pszErrBuf == nullptr;
 
-        // Get error message.
-        if( !bResult )
+    CPLJSONObject oRoot = oPatchFeatureReq.GetRoot();
+    if( oRoot.IsValid() )
+    {
+        if( bResult )
         {
-            ReportError(psResult->pabyData, psResult->nDataLen);
+            CPLJSONArray aoJSONIDs = oRoot.ToArray();
+            for( int i = 0; i < aoJSONIDs.Size(); ++i)
+            {
+                GIntBig nOutFID = aoJSONIDs[i].GetLong( "id", OGRNullFID );
+                aoFIDs.push_back(nOutFID);
+            }
         }
-        CPLHTTPDestroyResult(psResult);
+        else
+        {
+            std::string osErrorMessage = oRoot.GetString("message");
+            if( osErrorMessage.empty() )
+            {
+                osErrorMessage = "Patch features failed";
+            }
+            CPLError(CE_Failure, CPLE_AppDefined, "%s", osErrorMessage.c_str());
+        }
     }
-    return bResult;
+    else
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "Patch features failed");
+    }
+    return aoFIDs;
 }
 
 bool GetExtent(const std::string &osUrl, const std::string &osResourceId,
@@ -578,7 +683,7 @@ bool GetExtent(const std::string &osUrl, const std::string &osResourceId,
         std::string osErrorMessage = oRoot.GetString("message");
         if( osErrorMessage.empty() )
         {
-            osErrorMessage = "Create new feature failed";
+            osErrorMessage = "Get extent failed";
         }
         CPLError(CE_Failure, CPLE_AppDefined, "%s", osErrorMessage.c_str());
         return false;
@@ -642,6 +747,50 @@ bool GetExtent(const std::string &osUrl, const std::string &osResourceId,
         }
     }
     return true;
+}
+
+CPLJSONObject UploadFile(const std::string &osUrl, const std::string &osFilePath,
+    char **papszHTTPOptions, GDALProgressFunc pfnProgress, void *pProgressData)
+{
+    CPLErrorReset();
+    papszHTTPOptions = CSLAddString( papszHTTPOptions,
+        CPLSPrintf("FORM_FILE_PATH=%s", osFilePath.c_str()) );
+    papszHTTPOptions = CSLAddString( papszHTTPOptions, "FORM_FILE_NAME=file" );
+
+    const char* pszFormFileName = CPLGetFilename( osFilePath.c_str() );
+    papszHTTPOptions = CSLAddString( papszHTTPOptions, "FORM_KEY_0=name" );
+    papszHTTPOptions = CSLAddString( papszHTTPOptions,
+        CPLSPrintf("FORM_VALUE_0=%s", pszFormFileName) );
+    papszHTTPOptions = CSLAddString( papszHTTPOptions, "FORM_ITEM_COUNT=1" );
+
+    CPLHTTPResult *psResult = CPLHTTPFetchEx( GetUpload(osUrl).c_str(),
+        papszHTTPOptions, pfnProgress, pProgressData, nullptr, nullptr );
+    CSLDestroy( papszHTTPOptions );
+    bool bResult = false;
+    CPLJSONObject oResult;
+    if( psResult )
+    {
+        bResult = psResult->nStatus == 0 && psResult->pszErrBuf == nullptr;
+
+        // Get error message.
+        if( !bResult )
+        {
+            ReportError(psResult->pabyData, psResult->nDataLen);
+            return oResult;
+        }
+        CPLJSONDocument oFileJson;
+        if( oFileJson.LoadMemory(psResult->pabyData, psResult->nDataLen) )
+        {
+            oResult = oFileJson.GetRoot();
+        }
+        CPLHTTPDestroyResult(psResult);
+    }
+    else
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "Upload file %s failed",
+            osFilePath.c_str());
+    }
+    return oResult;
 }
 
 } // namespace NGWAPI

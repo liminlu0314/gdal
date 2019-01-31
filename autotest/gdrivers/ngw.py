@@ -36,11 +36,40 @@ from osgeo import gdal
 sys.path.append('../pymod')
 
 import gdaltest
+import time
+import json
 import pytest
+import random
+from datetime import datetime
 
 def check_availability(url):
+    # Sandbox cleans at 1:05 on monday (UTC)
+    now = datetime.utcnow()
+    if now.weekday() == 0:
+        if now.hour >= 1 and now.hour < 3:
+            return False
+
     version_url = url + '/api/component/pyramid/pkg_version'
-    return gdaltest.gdalurlopen(version_url) is not None
+
+    if gdaltest.gdalurlopen(version_url) is None:
+        return False
+
+    # Check quota
+    quota_url = url + '/api/resource/quota'
+    quota_conn = gdaltest.gdalurlopen(quota_url)
+    try:
+        quota_json = json.loads(quota_conn.read())
+        quota_conn.close()
+        if quota_json is None:
+            return False
+        limit = quota_json['limit']
+        count = quota_json['count']
+        return limit - count > 10
+    except:
+        return False
+
+def get_new_name():
+    return 'gdaltest_group_' + str(int(time.time())) + '_' + str(random.randint(10, 99))
 
 ###############################################################################
 # Verify we have the driver.
@@ -56,17 +85,14 @@ def test_ngw_1():
         gdaltest.ngw_drv = None
         pytest.skip()
 
-    gdaltest.ngw_test_server = 'https://dev.nextgis.com/sandbox'
+    gdaltest.ngw_test_server = 'http://dev.nextgis.com/sandbox'
 
     if check_availability(gdaltest.ngw_test_server) == False:
         gdaltest.ngw_drv = None
         pytest.skip()
 
 ###############################################################################
-# TODO: Create the NGW raster layer
-
-###############################################################################
-# Open the NGW dataset
+# Check create datasource.
 
 def test_ngw_2():
 
@@ -77,15 +103,84 @@ def test_ngw_2():
         gdaltest.ngw_drv = None
         pytest.skip()
 
-    url = 'NGW:' + gdaltest.ngw_test_server + '/resource/1734'
-    gdaltest.ngw_ds = gdal.Open(url)
+    create_url = 'NGW:' + gdaltest.ngw_test_server + '/resource/0/' + get_new_name()
+    gdal.PushErrorHandler()
+    description = 'GDAL Raster test group'
+    gdaltest.ngw_ds = gdaltest.ngw_drv.Create(create_url, 0, 0, 0, gdal.GDT_Unknown, \
+        options=['DESCRIPTION=' + description,])
+    gdal.PopErrorHandler()
+
+    assert gdaltest.ngw_ds is not None, 'Create datasource failed.'
+    assert gdaltest.ngw_ds.GetMetadataItem('description', '') == description, \
+        'Did not get expected datasource description.'
+
+    assert int(gdaltest.ngw_ds.GetMetadataItem('id', '')) > 0, \
+        'Did not get expected datasource identifier.'
+
+###############################################################################
+# Check rename datasource.
+
+def test_ngw_3():
+
+    if gdaltest.ngw_drv is None:
+        pytest.skip()
+
+    if check_availability(gdaltest.ngw_test_server) == False:
+        gdaltest.ngw_drv = None
+        pytest.skip()
+
+    new_name = get_new_name() + '_2'
+    ds_resource_id = gdaltest.ngw_ds.GetMetadataItem('id', '')
+    rename_url = 'NGW:' + gdaltest.ngw_test_server + '/resource/' + ds_resource_id
+
+    assert gdaltest.ngw_drv.Rename(new_name, rename_url) == gdal.CE_None, \
+        'Rename datasource failed.'
+
+###############################################################################
+# Create the NGW raster layer
+
+def test_ngw_4():
+
+    if gdaltest.ngw_drv is None:
+        pytest.skip()
+
+    if check_availability(gdaltest.ngw_test_server) == False:
+        gdaltest.ngw_drv = None
+        pytest.skip()
+
+    src_ds = gdal.Open('data/rgbsmall.tif')
+    resource_id = gdaltest.ngw_ds.GetMetadataItem('id', '')
+    url = 'NGW:' + gdaltest.ngw_test_server + '/resource/' + resource_id + '/rgbsmall'
+    ds = gdaltest.ngw_drv.CreateCopy(url, src_ds, options=['DESCRIPTION=Test raster create'])
+    assert ds is not None, 'Raster create failed'
+
+    ds_resource_id = ds.GetMetadataItem('id', '')
+    gdaltest.raster_id = ds_resource_id
+    gdaltest.group_id = resource_id
+    ds = None
+
+
+###############################################################################
+# Open the NGW dataset
+
+def test_ngw_5():
+
+    if gdaltest.ngw_drv is None or gdaltest.raster_id is None:
+        pytest.skip()
+
+    if check_availability(gdaltest.ngw_test_server) == False:
+        gdaltest.ngw_drv = None
+        pytest.skip()
+
+    url = 'NGW:' + gdaltest.ngw_test_server + '/resource/' + gdaltest.raster_id
+    gdaltest.ngw_ds = gdal.OpenEx(url, gdal.OF_RASTER)
 
     assert gdaltest.ngw_ds is not None, 'Open {} failed.'.format(url)
 
 ###############################################################################
 # Check various things about the configuration.
 
-def test_ngw_3():
+def test_ngw_6():
 
     if gdaltest.ngw_drv is None or gdaltest.ngw_ds is None:
         pytest.skip()
@@ -117,19 +212,21 @@ def test_ngw_3():
 ###############################################################################
 # Check checksum for a small region.
 
-def test_ngw_4():
+def test_ngw_7():
 
     if gdaltest.ngw_drv is None or gdaltest.ngw_ds is None:
         pytest.skip()
 
     if check_availability(gdaltest.ngw_test_server) == False:
+        gdaltest.ngw_ds = None
         gdaltest.ngw_drv = None
         pytest.skip()
 
     gdal.SetConfigOption('CPL_ACCUM_ERROR_MSG', 'ON')
     gdal.PushErrorHandler('CPLQuietErrorHandler')
 
-    cs = gdaltest.ngw_ds.GetRasterBand(1).Checksum(0, 0, 100, 100)
+    ovr_band = gdaltest.ngw_ds.GetRasterBand(1).GetOverview(21)
+    cs = ovr_band.Checksum()
 
     gdal.PopErrorHandler()
     gdal.SetConfigOption('CPL_ACCUM_ERROR_MSG', 'OFF')
@@ -140,31 +237,29 @@ def test_ngw_4():
         print('Last error message: {}.'.format(msg))
         pytest.skip()
 
-    assert cs == 57182, 'Wrong checksum: ' + str(cs)
+    assert cs == 5, 'Wrong checksum: ' + str(cs)
 
 ###############################################################################
 # Test getting subdatasets from GetCapabilities
 
-def test_ngw_5():
+def test_ngw_8():
 
-    if gdaltest.ngw_drv is None:
+    if gdaltest.ngw_drv is None or gdaltest.group_id is None:
         pytest.skip()
 
     if check_availability(gdaltest.ngw_test_server) == False:
         gdaltest.ngw_drv = None
         pytest.skip()
 
-    url = 'NGW:' + gdaltest.ngw_test_server + '/resource/1730'
-    ds = gdal.Open(url)
+    url = 'NGW:' + gdaltest.ngw_test_server + '/resource/' + gdaltest.group_id
+    ds = gdal.OpenEx(url, gdal.OF_VECTOR | gdal.OF_RASTER )
     assert ds is not None, 'Open of {} failed.'.format(url)
 
     subdatasets = ds.GetMetadata("SUBDATASETS")
-    assert subdatasets, 'Did not get expected subdataset count.'
-
-    ds = None
+    assert subdatasets, 'Did not get expected subdataset count. Get {} subdatasets. Url: {}'.format(len(subdatasets), url)
 
     name = subdatasets['SUBDATASET_0_NAME']
-    ds = gdal.Open(name)
+    ds = gdal.OpenEx(name, gdal.OF_RASTER)
     assert ds is not None, 'Open of {} failed.'.format(name)
 
     ds = None
@@ -172,6 +267,17 @@ def test_ngw_5():
 ###############################################################################
 
 def test_ngw_cleanup():
+
+    if gdaltest.ngw_drv is None:
+        pytest.skip()
+
+    if gdaltest.group_id is not None:
+        delete_url = 'NGW:' + gdaltest.ngw_test_server + '/resource/' + gdaltest.group_id
+
+        gdaltest.ngw_ds = None
+
+        assert gdaltest.ngw_drv.Delete(delete_url) == gdal.CE_None, \
+            'Failed to delete datasource ' + delete_url + '.'
 
     gdaltest.ngw_ds = None
     gdaltest.clean_tmp()

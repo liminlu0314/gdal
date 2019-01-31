@@ -261,8 +261,8 @@ non-standard (regarding to the intrinsics TIFF capabilities) band color
 interpretation, such as BGR ordering, will be handled in creation and reading,
 by storing them in the GDAL internal metadata TIFF tag.</p>
 
-<p>Note that the GeoTIFF format does not support parametric description of datums,
-so TOWGS84 parameters in coordinate systems are lost in GeoTIFF format.</p>
+<p>The TIFF format only supports R,G,B components for palettes / color tables.
+Thus on writing the alpha information will be silently discarded.</p>
 
 <p>You may want to read hints to <a href="https://trac.osgeo.org/gdal/wiki/CloudOptimizedGeoTIFF">
 generate and read cloud optimized GeoTIFF files</a></p>
@@ -425,6 +425,15 @@ SRS. For other SRS, the standard way will be used, with the addition of a ESRI_P
 string as the value of PCSCitationGeoKey.</p></li>
 
 </ul>
+
+<h3>Sudatasets</h3>
+
+<p>Multi-page TIFF files are exposed as subdatasets. A subdataset name is
+GTIFF_DIR:{index}:filename.tif, where {index} starts at 1.</p>
+
+<p>Starting with GDAL 2.5.0, subdataset creation is possible by using the
+APPEND_SUBDATASET=YES creation option. Creating overviews on a multi-page
+TIFF is not supported.</p>
 
 <h3>About JPEG compression of RGB images </h3>
 
