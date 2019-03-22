@@ -296,7 +296,7 @@ def test_ogr_openfilegdb_1(filename='data/testopenfilegdb.gdb.zip', version10=Tr
         assert lyr.GetLayerDefn().GetFieldDefn(lyr.GetLayerDefn().GetFieldIndex('smallint')).GetSubType() == ogr.OFSTInt16
         assert lyr.GetLayerDefn().GetFieldDefn(lyr.GetLayerDefn().GetFieldIndex('float')).GetSubType() == ogr.OFSTFloat32
         if data[1] != ogr.wkbNone:
-            assert lyr.GetSpatialRef().IsSame(srs) == 1
+            assert lyr.GetSpatialRef().IsSame(srs, options = ['IGNORE_DATA_AXIS_TO_SRS_AXIS_MAPPING=YES']) == 1
         feat = lyr.GetNextFeature()
         if data[1] != ogr.wkbNone:
             try:
@@ -1315,7 +1315,23 @@ def test_ogr_openfilegdb_21():
         f.DumpReadable()
         pytest.fail()
 
-    
+###############################################################################
+# Test bugfix for https://github.com/OSGeo/gdal/issues/1369
+# where a polygon with inner rings has its exterior ring with wrong orientation
+
+def test_ogr_openfilegdb_weird_winding_order():
+
+    if not ogrtest.have_geos():
+        pytest.skip()
+
+    ds = ogr.Open('/vsizip/data/weird_winding_order_fgdb.zip/roads_clip Drawing.gdb')
+    lyr = ds.GetLayer(0)
+    f = lyr.GetNextFeature()
+    g = f.GetGeometryRef()
+    assert g.GetGeometryCount() == 1
+    assert g.GetGeometryRef(0).GetGeometryCount() == 17
+
+
 ###############################################################################
 # Cleanup
 

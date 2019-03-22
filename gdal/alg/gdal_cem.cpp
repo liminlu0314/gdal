@@ -582,7 +582,7 @@ int GDALCEMTransform(void *pTransformArg, int bDstToSrc,
 			if (pszSpatialRef != NULL && pszSpatialRef[0] != '\0')
 			{
 				OGRSpatialReference* poWGSSpaRef =
-					new OGRSpatialReference(SRS_WKT_WGS84);
+					new OGRSpatialReference(SRS_WKT_WGS84_LAT_LONG);
 				OGRSpatialReference* poDSSpaRef =
 					new OGRSpatialReference(pszSpatialRef);
 				if (!poWGSSpaRef->IsSame(poDSSpaRef))

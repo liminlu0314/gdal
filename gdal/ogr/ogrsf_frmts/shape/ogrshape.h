@@ -40,6 +40,7 @@
 #include "shapefil.h"
 #include "shp_vsi.h"
 #include "ogrlayerpool.h"
+#include <set>
 #include <vector>
 
 /* Was limited to 255 until OGR 1.10, but 254 seems to be a more */
@@ -85,10 +86,13 @@ class OGRShapeGeomFieldDefn final: public OGRGeomFieldDefn
             pszFullName(CPLStrdup(pszFullNameIn)),
             bSRSSet(CPL_TO_BOOL(bSRSSetIn))
         {
-            poSRS = poSRSIn;
+            SetSpatialRef(poSRSIn);
         }
 
-        virtual ~OGRShapeGeomFieldDefn() { CPLFree(pszFullName); }
+        virtual ~OGRShapeGeomFieldDefn()
+        {
+            CPLFree(pszFullName);
+        }
 
         virtual OGRSpatialReference* GetSpatialRef() const override;
 
@@ -179,6 +183,9 @@ class OGRShapeLayer final: public OGRAbstractProxiedLayer
         MAYBE
     } NormandyState; /* French joke. "Peut'et' ben que oui, peut'et' ben que non." Sorry :-) */
     NormandyState       m_eNeedRepack;
+
+    // Set of field names (in upper case). Built and invalidated when convenient
+    std::set<CPLString> m_oSetUCFieldName{};
 
   protected:
 

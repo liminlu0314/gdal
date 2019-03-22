@@ -96,7 +96,15 @@ PDFWritableVectorDataset::ICreateLayer( const char * pszLayerName,
 /* -------------------------------------------------------------------- */
 /*      Create the layer object.                                        */
 /* -------------------------------------------------------------------- */
-    OGRLayer* poLayer = new OGRPDFWritableLayer(this, pszLayerName, poSRS, eType);
+    auto poSRSClone = poSRS;
+    if( poSRSClone )
+    {
+        poSRSClone = poSRSClone->Clone();
+        poSRSClone->SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    }
+    OGRLayer* poLayer = new OGRPDFWritableLayer(this, pszLayerName, poSRSClone, eType);
+    if( poSRSClone )
+        poSRSClone->Release();
 
     papoLayers = (OGRLayer**)CPLRealloc(papoLayers, (nLayers + 1) * sizeof(OGRLayer*));
     papoLayers[nLayers] = poLayer;
@@ -268,12 +276,24 @@ OGRErr PDFWritableVectorDataset::SyncToDisk()
     if (dfRatio < 1)
     {
         nWidth = 1024;
-        nHeight = static_cast<int>(nWidth * dfRatio);
+        const double dfHeight = nWidth * dfRatio;
+        if( dfHeight < 1 || dfHeight > INT_MAX || CPLIsNan(dfHeight) )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined, "Invalid image dimensions");
+            return OGRERR_FAILURE;
+        }
+        nHeight = static_cast<int>(dfHeight);
     }
     else
     {
         nHeight = 1024;
-        nWidth = static_cast<int>(nHeight / dfRatio);
+        const double dfWidth = nHeight / dfRatio;
+        if( dfWidth < 1 || dfWidth > INT_MAX || CPLIsNan(dfWidth) )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined, "Invalid image dimensions");
+            return OGRERR_FAILURE;
+        }
+        nWidth = static_cast<int>(dfWidth);
     }
 
     GDALDataset* poSrcDS = MEMDataset::Create( "MEM:::", nWidth, nHeight, 0, GDT_Byte, nullptr );

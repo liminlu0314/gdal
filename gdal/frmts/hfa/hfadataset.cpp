@@ -71,7 +71,7 @@ constexpr double D2R = M_PI / 180.0;
 constexpr double ARCSEC2RAD = M_PI / 648000.0;
 constexpr double RAD2ARCSEC = 648000.0 / M_PI;
 
-int WritePeStringIfNeeded( OGRSpatialReference *poSRS, HFAHandle hHFA, bool bForceToPEString);
+int WritePeStringIfNeeded( const OGRSpatialReference *poSRS, HFAHandle hHFA );
 void ClearSR( HFAHandle hHFA );
 
 static const char *const apszDatumMap[] = {
@@ -1895,6 +1895,7 @@ HFARasterBand::HFARasterBand( HFADataset *poDSIn, int nBandIn, int iOverview ) :
         poDS = nullptr;
 
     nBand = nBandIn;
+    eAccess = poDSIn->GetAccess();
 
     int nCompression = 0;
     HFAGetBandInfo(hHFA, nBand, &eHFADataType,
@@ -3456,7 +3457,7 @@ CPLErr HFADataset::WriteProjection()
         }
 
         // Verify if we need to write a ESRI PE string.
-        bPEStringStored = CPL_TO_BOOL(WritePeStringIfNeeded(&oSRS, hHFA, bForceToPEString));
+        bPEStringStored = CPL_TO_BOOL(WritePeStringIfNeeded(&oSRS, hHFA));
 
         sPro.proSpheroid.sphereName =
             (char *)poGeogSRS->GetAttrValue("GEOGCS|DATUM|SPHEROID");
@@ -4174,7 +4175,7 @@ CPLErr HFADataset::WriteProjection()
 /************************************************************************/
 /*                       WritePeStringIfNeeded()                        */
 /************************************************************************/
-int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA, bool bForceToPEString)
+int WritePeStringIfNeeded( const OGRSpatialReference* poSRS, HFAHandle hHFA )
 {
     if( !poSRS || !hHFA )
         return FALSE;
@@ -4198,7 +4199,8 @@ int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA, bool bFor
          STARTS_WITH(pszDatum, "D_")) ? strlen("D_") : 0;
 
     bool ret = false;
-    if( !EQUAL(pszGEOGCS + gcsNameOffset, pszDatum + datumNameOffset) )
+    if( CPLString(pszGEOGCS + gcsNameOffset).replaceAll(' ', '_').tolower() !=
+        CPLString(pszDatum + datumNameOffset).replaceAll(' ', '_').tolower() )
     {
         ret = true;
     }
@@ -4210,8 +4212,8 @@ int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA, bool bFor
 
         if( !ret )
         {
-            OGR_SRSNode *poAUnits = poSRS->GetAttrNode("GEOGCS|UNIT");
-            OGR_SRSNode *poChild =
+            const OGR_SRSNode *poAUnits = poSRS->GetAttrNode("GEOGCS|UNIT");
+            const OGR_SRSNode *poChild =
                 poAUnits == nullptr ? nullptr : poAUnits->GetChild(0);
             name = poChild == nullptr ? nullptr : poChild->GetValue();
             if( name && !EQUAL(name, "Degree") )
@@ -4252,11 +4254,12 @@ int WritePeStringIfNeeded( OGRSpatialReference* poSRS, HFAHandle hHFA, bool bFor
             }
         }
     }
-    if( ret && bForceToPEString)
+    if( ret )
     {
         char *pszPEString = nullptr;
-        poSRS->morphToESRI();
-        poSRS->exportToWkt(&pszPEString);
+        OGRSpatialReference oSRSForESRI(*poSRS);
+        oSRSForESRI.morphToESRI();
+        oSRSForESRI.exportToWkt(&pszPEString);
         HFASetPEString(hHFA, pszPEString);
         CPLFree(pszPEString);
     }
@@ -4540,7 +4543,7 @@ HFAPCSStructToWKT( const Eprj_Datum *psDatum,
           {
               oSRS.morphFromESRI();
               oSRS.AutoIdentifyEPSG();
-              oSRS.Fixup();
+
               if( oSRS.exportToWkt(&pszNewProj) == OGRERR_NONE )
                   return pszNewProj;
               else
@@ -4571,14 +4574,13 @@ HFAPCSStructToWKT( const Eprj_Datum *psDatum,
         // Check the possible Wisconsin first.
         if( psDatum && psMapInfo && EQUAL(psDatum->datumname, "HARN") )
         {
+            // ERO: I doubt this works. Wisconsin LCC is LCC_1SP whereas
+            // we are here in the LCC_2SP case...
             if( oSRS.ImportFromESRIWisconsinWKT(
                     "Lambert_Conformal_Conic", psPro->proParams[4] * R2D,
                     psPro->proParams[5] * R2D,
                     psMapInfo->units) == OGRERR_NONE )
             {
-                oSRS.morphFromESRI();
-                oSRS.AutoIdentifyEPSG();
-                oSRS.Fixup();
                 if( oSRS.exportToWkt(&pszNewProj) == OGRERR_NONE )
                     return pszNewProj;
             }
@@ -4627,9 +4629,6 @@ HFAPCSStructToWKT( const Eprj_Datum *psDatum,
                     psPro->proParams[5] * R2D,
                     psMapInfo->units) == OGRERR_NONE )
             {
-                oSRS.morphFromESRI();
-                oSRS.AutoIdentifyEPSG();
-                oSRS.Fixup();
                 if( oSRS.exportToWkt(&pszNewProj) == OGRERR_NONE )
                     return pszNewProj;
             }
@@ -5009,8 +5008,7 @@ HFAPCSStructToWKT( const Eprj_Datum *psDatum,
     }
 
     // Try and set the GeogCS information.
-    if( oSRS.GetAttrNode("GEOGCS") == nullptr &&
-        oSRS.GetAttrNode("LOCAL_CS") == nullptr )
+    if( !oSRS.IsLocal() )
     {
         if( pszDatumName == nullptr)
             oSRS.SetGeogCS(pszDatumName, pszDatumName, pszEllipsoidName,
@@ -5040,10 +5038,8 @@ HFAPCSStructToWKT( const Eprj_Datum *psDatum,
         }
     }
 
-    // Try to insert authority information if possible.  Fixup any
-    // ordering oddities.
+    // Try to insert authority information if possible.
     oSRS.AutoIdentifyEPSG();
-    oSRS.Fixup();
 
     // Get the WKT representation of the coordinate system.
     if( oSRS.exportToWkt(&pszNewProj) == OGRERR_NONE )
@@ -5133,8 +5129,6 @@ CPLErr HFADataset::ReadProjection()
                                 adfCoeffs[6]);
             }
         }
-
-        oSRS.Fixup();
 
         CPLFree(pszProjection);
         pszProjection = nullptr;
@@ -5387,13 +5381,13 @@ GDALDataset *HFADataset::Open( GDALOpenInfo * poOpenInfo )
 /*                          GetProjectionRef()                          */
 /************************************************************************/
 
-const char *HFADataset::GetProjectionRef() { return pszProjection; }
+const char *HFADataset::_GetProjectionRef() { return pszProjection; }
 
 /************************************************************************/
 /*                           SetProjection()                            */
 /************************************************************************/
 
-CPLErr HFADataset::SetProjection( const char *pszNewProjection )
+CPLErr HFADataset::_SetProjection( const char *pszNewProjection )
 
 {
     CPLFree(pszProjection);
@@ -5607,7 +5601,7 @@ int HFADataset::GetGCPCount() { return nGCPCount; }
 /*                          GetGCPProjection()                          */
 /************************************************************************/
 
-const char *HFADataset::GetGCPProjection()
+const char *HFADataset::_GetGCPProjection()
 
 {
     if( nGCPCount > 0 )

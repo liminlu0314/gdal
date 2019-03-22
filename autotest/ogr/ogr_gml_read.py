@@ -580,6 +580,7 @@ def test_ogr_gml_18():
     sr = lyr.GetSpatialRef()
     got_wkt = sr.ExportToWkt()
     assert got_wkt.find('GEOGCS["WGS 84"') != -1, 'did not get expected SRS'
+    assert sr.GetDataAxisToSRSAxisMapping() == [2, 1]
 
     feat = lyr.GetNextFeature()
     geom = feat.GetGeometryRef()
@@ -608,9 +609,9 @@ def test_ogr_gml_19():
     lyr = ds.GetLayer(0)
     sr = lyr.GetSpatialRef()
     got_wkt = sr.ExportToWkt()
-    assert (not (got_wkt.find('GEOGCS["WGS 84"') == -1 or \
-       got_wkt.find('AXIS["Latitude",NORTH],AXIS["Longitude",EAST]') == -1)), \
+    assert 'GEOGCS["WGS 84"' in got_wkt, \
         'did not get expected SRS'
+    assert sr.GetDataAxisToSRSAxisMapping() == [1, 2]
 
     feat = lyr.GetNextFeature()
     geom = feat.GetGeometryRef()
@@ -798,9 +799,9 @@ def test_ogr_gml_23():
     lyr = ds.GetLayer(0)
     sr = lyr.GetSpatialRef()
     got_wkt = sr.ExportToWkt()
-    assert (got_wkt.find('GEOGCS["WGS 84"') != -1 and \
-       got_wkt.find('AXIS["Latitude",NORTH],AXIS["Longitude",EAST]') == -1), \
+    assert 'GEOGCS["WGS 84"' in got_wkt, \
         'did not get expected SRS'
+    assert lyr.GetSpatialRef().GetDataAxisToSRSAxisMapping() == [2, 1]
 
     feat = lyr.GetNextFeature()
     geom = feat.GetGeometryRef()
@@ -3311,7 +3312,7 @@ def test_ogr_gml_77():
 
     ds = ogr.Open('/vsimem/ogr_gml_77.xml')
     lyr = ds.GetLayer(0)
-    assert lyr.GetSpatialRef().ExportToWkt().find('AXIS') < 0
+    assert lyr.GetSpatialRef().GetDataAxisToSRSAxisMapping() == [2, 1]
     f = lyr.GetNextFeature()
     assert f.GetGeometryRef().ExportToWkt() == 'POINT (2 49)'
     ds = None
@@ -3357,7 +3358,7 @@ def test_ogr_gml_78():
 
     ds = ogr.Open('/vsimem/ogr_gml_78.xml')
     lyr = ds.GetLayer(0)
-    assert lyr.GetSpatialRef().ExportToWkt().find('AXIS') < 0
+    assert lyr.GetSpatialRef().GetDataAxisToSRSAxisMapping() == [2, 1]
     f = lyr.GetNextFeature()
     assert f.GetGeometryRef().ExportToWkt() == 'POINT (2 49)'
     ds = None
@@ -3573,6 +3574,25 @@ def test_ogr_gml_srsname_only_on_top_bounded_by():
 
     gdal.Unlink(tmpname)
     gdal.Unlink(tmpname[0:-3] + "gfs")
+
+###############################################################################
+# Test understanding of XSD that uses 'FeatureType' suffix instead of 'Type'.
+# If schema was understood, fields 2/3/4 will be 'Real' rather than 'Integer'.
+
+def test_ogr_gml_featuretype_suffix_in_xsd():
+
+    if not gdaltest.have_gml_reader:
+        pytest.skip()
+
+    gdal.Unlink('data/arcgis-world-wfs.gfs')
+    
+    ds = ogr.Open('data/arcgis-world-wfs.gml,xsd=data/arcgis-world-wfs.xsd')
+    lyr = ds.GetLayer(0)
+    
+    for i in range(2, 4):
+      assert lyr.GetLayerDefn().GetFieldDefn(i).GetType() == ogr.OFTReal
+    
+    gdal.Unlink('data/arcgis-world-wfs.gfs')
 
 ###############################################################################
 #  Cleanup

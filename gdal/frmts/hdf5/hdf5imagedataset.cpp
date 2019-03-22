@@ -96,9 +96,15 @@ public:
     static GDALDataset  *Open( GDALOpenInfo * );
     static int           Identify( GDALOpenInfo * );
 
-    const char          *GetProjectionRef() override;
+    const char          *_GetProjectionRef() override;
+    const OGRSpatialReference* GetSpatialRef() const override {
+        return GetSpatialRefFromOldGetProjectionRef();
+    }
     virtual int         GetGCPCount() override;
-    virtual const char  *GetGCPProjection() override;
+    virtual const char  *_GetGCPProjection() override;
+        const OGRSpatialReference* GetGCPSpatialRef() const override {
+        return GetGCPSpatialRefFromOldGetGCPProjection();
+    }
     virtual const GDAL_GCP *GetGCPs() override;
     virtual CPLErr GetGeoTransform( double *padfTransform ) override;
 
@@ -332,10 +338,11 @@ CPLErr HDF5ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
 {
     HDF5ImageDataset *poGDS = static_cast<HDF5ImageDataset *>(poDS);
 
+    memset(pImage, 0,
+            static_cast<size_t>(nBlockXSize) * nBlockYSize * GDALGetDataTypeSizeBytes(eDataType));
+
     if( poGDS->eAccess == GA_Update )
     {
-        memset(pImage, 0,
-               nBlockXSize * nBlockYSize * GDALGetDataTypeSize(eDataType) / 8);
         return CE_None;
     }
 
@@ -364,9 +371,6 @@ CPLErr HDF5ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
     offset[poGDS->GetXIndex()] = nBlockXOff * static_cast<hsize_t>(nBlockXSize);
     count[poGDS->GetYIndex()] = nBlockYSize;
     count[poGDS->GetXIndex()] = nBlockXSize;
-
-    const int nSizeOfData = static_cast<int>(H5Tget_size(poGDS->native));
-    memset(pImage, 0, nBlockXSize * nBlockYSize * nSizeOfData);
 
     // Blocksize may not be a multiple of imagesize.
     count[poGDS->GetYIndex()] =
@@ -642,11 +646,13 @@ CPLErr HDF5ImageDataset::CreateODIMH5Projection()
         pszUR_lon == nullptr || pszUR_lat == nullptr )
         return CE_Failure;
 
+    oSRS.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
     if( oSRS.importFromProj4(pszProj4String) != OGRERR_NONE )
         return CE_Failure;
 
     OGRSpatialReference oSRSWGS84;
     oSRSWGS84.SetWellKnownGeogCS("WGS84");
+    oSRSWGS84.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
 
     OGRCoordinateTransformation *poCT =
         OGRCreateCoordinateTransformation(&oSRSWGS84, &oSRS);
@@ -857,13 +863,13 @@ CPLErr HDF5ImageDataset::CreateProjections()
 /*                          GetProjectionRef()                          */
 /************************************************************************/
 
-const char *HDF5ImageDataset::GetProjectionRef()
+const char *HDF5ImageDataset::_GetProjectionRef()
 
 {
     if( pszProjection )
         return pszProjection;
 
-    return GDALPamDataset::GetProjectionRef();
+    return GDALPamDataset::_GetProjectionRef();
 }
 
 /************************************************************************/
@@ -883,13 +889,13 @@ int HDF5ImageDataset::GetGCPCount()
 /*                          GetGCPProjection()                          */
 /************************************************************************/
 
-const char *HDF5ImageDataset::GetGCPProjection()
+const char *HDF5ImageDataset::_GetGCPProjection()
 
 {
     if( nGCPCount > 0 )
         return pszGCPProjection;
 
-    return GDALPamDataset::GetGCPProjection();
+    return GDALPamDataset::_GetGCPProjection();
 }
 
 /************************************************************************/

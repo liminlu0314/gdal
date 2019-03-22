@@ -1214,3 +1214,97 @@ def test_vrt_invalid_dstrect():
     </VRTRasterBand>
     </VRTDataset>"""
     assert gdal.Open(vrt_text) is None
+
+
+def test_vrt_no_explicit_dataAxisToSRSAxisMapping():
+
+    vrt_text = """<VRTDataset rasterXSize="20" rasterYSize="20">
+    <SRS>GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]</SRS>
+    <VRTRasterBand dataType="Byte" band="1">
+        <SimpleSource>
+        <SourceFilename relative="1">data/byte.tif</SourceFilename>
+        <SourceBand>1</SourceBand>
+        <SourceProperties RasterXSize="20" RasterYSize="20" DataType="Byte" BlockXSize="20" BlockYSize="20" />
+        <SrcRect xOff="0" yOff="0" xSize="20" ySize="20" />
+        <DstRect xOff="0" yOff="0" xSize="20" ySize="20" />
+        </SimpleSource>
+    </VRTRasterBand>
+    </VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+    assert ds.GetSpatialRef().GetDataAxisToSRSAxisMapping() == [2,1]
+
+
+def test_vrt_explicit_dataAxisToSRSAxisMapping_1_2():
+
+    vrt_text = """<VRTDataset rasterXSize="20" rasterYSize="20">
+    <SRS dataAxisToSRSAxisMapping="1,2">GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]</SRS>
+    <VRTRasterBand dataType="Byte" band="1">
+        <SimpleSource>
+        <SourceFilename relative="1">data/byte.tif</SourceFilename>
+        <SourceBand>1</SourceBand>
+        <SourceProperties RasterXSize="20" RasterYSize="20" DataType="Byte" BlockXSize="20" BlockYSize="20" />
+        <SrcRect xOff="0" yOff="0" xSize="20" ySize="20" />
+        <DstRect xOff="0" yOff="0" xSize="20" ySize="20" />
+        </SimpleSource>
+    </VRTRasterBand>
+    </VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+    assert ds.GetSpatialRef().GetDataAxisToSRSAxisMapping() == [1,2]
+
+
+def test_vrt_shared_no_proxy_pool():
+
+    before = gdaltest.get_opened_files()
+    vrt_text = """<VRTDataset rasterXSize="50" rasterYSize="50">
+  <VRTRasterBand dataType="Byte" band="1">
+    <ColorInterp>Red</ColorInterp>
+    <SimpleSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <ColorInterp>Green</ColorInterp>
+    <SimpleSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <ColorInterp>Blue</ColorInterp>
+    <SimpleSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+    assert ds
+    assert ds.GetRasterBand(1).Checksum() == 21212
+    assert ds.GetRasterBand(2).Checksum() == 21053
+    assert ds.GetRasterBand(3).Checksum() == 21349
+    ds = None
+
+    after = gdaltest.get_opened_files()
+    assert len(before) == len(after)
+
+
+def test_vrt_shared_no_proxy_pool_error():
+
+    vrt_text = """<VRTDataset rasterXSize="50" rasterYSize="50">
+  <VRTRasterBand dataType="Byte" band="1">
+    <SimpleSource>
+      <SourceFilename>data/byte.tif</SourceFilename>
+      <SourceBand>10</SourceBand>
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <SimpleSource>
+      <SourceFilename>data/byte.tif</SourceFilename>
+      <SourceBand>11</SourceBand>
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>"""
+    with gdaltest.error_handler():
+        ds = gdal.Open(vrt_text)
+    assert not ds

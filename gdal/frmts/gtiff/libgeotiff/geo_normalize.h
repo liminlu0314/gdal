@@ -1,5 +1,5 @@
 /******************************************************************************
- * $Id: geo_normalize.h 2233 2012-10-09 01:33:11Z warmerdam $
+ * $Id$
  *
  * Project:  libgeotiff
  * Purpose:  Include file related to geo_normalize.c containing Code to
@@ -172,20 +172,22 @@ double GTIF_DLL GTIFAngleToDD( double dfAngle, int nUOMAngle );
 
 /* this should be used to free strings returned by GTIFGet... funcs */
 void GTIF_DLL GTIFFreeMemory( char * );
-void GTIF_DLL GTIFDeaccessCSV( void );
+
+/* The void* should be a PJ_CONTEXT* */
+void GTIF_DLL GTIFAttachPROJContext( GTIF *psGTIF, void* pjContext );
+void GTIF_DLL *GTIFGetPROJContext( GTIF *psGTIF, int instanciateIfNeeded,
+                                   int* out_gtif_own_pj_context );
 
 int GTIF_DLL GTIFGetDefn( GTIF *psGTIF, GTIFDefn * psDefn );
 void GTIF_DLL GTIFPrintDefn( GTIFDefn *, FILE * );
+void GTIF_DLL GTIFPrintDefnEx( GTIF *psGTIF, GTIFDefn *, FILE * );
 GTIFDefn GTIF_DLL *GTIFAllocDefn( void );
 void GTIF_DLL GTIFFreeDefn( GTIFDefn * );
-
-void GTIF_DLL SetCSVFilenameHook( const char *(*CSVFileOverride)(const char *) );
 
 const char GTIF_DLL *GTIFDecToDMS( double, const char *, int );
 
 /*
- * These are useful for recognising UTM and State Plane, with or without
- * CSV files being found.
+ * These are useful for recognising UTM and State Plane.
  */
 
 #define MapSys_UTM_North	-9001
@@ -208,9 +210,13 @@ int  GTIF_DLL  GTIFProj4FromLatLong( GTIFDefn *, int, double *, double * );
 
 int  GTIF_DLL  GTIFSetFromProj4( GTIF *gtif, const char *proj4 );
 
-#if defined(HAVE_LIBPROJ) && defined(HAVE_PROJECTS_H)
-#  define HAVE_GTIFPROJ4
-#endif
+
+/*
+ * The following functions were used up to libgeotiff 1.4.X series, but
+ * are now no-operation, since there is no longer any CSV use in libgeotiff.
+ */
+void GTIF_DLL GTIFDeaccessCSV( void );
+
 
 #ifdef __cplusplus
 }

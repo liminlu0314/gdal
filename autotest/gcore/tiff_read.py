@@ -397,8 +397,8 @@ def test_tiff_grads():
     ds = gdal.Open('data/test_gf.tif')
     srs = ds.GetProjectionRef()
 
-    assert srs.find('PARAMETER["latitude_of_origin",46.8]') != -1, \
-        'Did not get expected latitude of origin.'
+    assert srs.find('PARAMETER["latitude_of_origin",52]') != -1, \
+        ('Did not get expected latitude of origin: wkt=%s' % srs)
 
 ###############################################################################
 # Check Erdas Citation Parsing for coordinate system.
@@ -507,9 +507,6 @@ def test_tiff_linearparmunits2():
 
 
 def test_tiff_g4_split():
-
-    if 'GetBlockSize' not in dir(gdal.Band):
-        pytest.skip()
 
     ds = gdal.Open('data/slim_g4.tif')
 
@@ -625,7 +622,7 @@ def test_tiff_ProjectedCSTypeGeoKey_only():
 def test_tiff_GTModelTypeGeoKey_only():
 
     ds = gdal.Open('data/GTModelTypeGeoKey_only.tif')
-    assert ds.GetProjectionRef().find('LOCAL_CS["unnamed",GEOGCS["unknown",DATUM["unknown",SPHEROID["unretrievable - using WGS84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT[,0.0174532925199433]],UNIT["unknown",1]]') == 0
+    assert ds.GetProjectionRef().find('LOCAL_CS["unnamed"]') == 0
     ds = None
 
 ###############################################################################
@@ -2147,7 +2144,10 @@ def test_tiff_read_scanline_more_than_2GB():
 
     with gdaltest.error_handler():
         ds = gdal.Open('data/scanline_more_than_2GB.tif')
-    assert ds is None
+    if sys.maxsize > 2**32:
+        assert ds is not None
+    else:
+        assert ds is None
 
 ###############################################################################
 # Test that we are at least robust to wrong number of ExtraSamples and warn
@@ -2462,18 +2462,19 @@ def test_tiff_read_ycbcr_int12():
 
 def test_tiff_read_unit_from_srs():
 
-    ds = gdal.GetDriverByName('GTiff').Create('/vsimem/tiff_read_unit_from_srs.tif', 1, 1)
+    filename = '/vsimem/tiff_read_unit_from_srs.tif'
+    ds = gdal.GetDriverByName('GTiff').Create(filename, 1, 1)
     sr = osr.SpatialReference()
     sr.SetFromUserInput('EPSG:4326+3855')
     ds.SetProjection(sr.ExportToWkt())
     ds = None
 
-    ds = gdal.Open('/vsimem/tiff_read_unit_from_srs.tif')
+    ds = gdal.Open(filename)
     unit = ds.GetRasterBand(1).GetUnitType()
     assert unit == 'metre'
     ds = None
 
-    gdal.Unlink('/vsimem/tiff_read_unit_from_srs.tif')
+    gdal.Unlink(filename)
 
 ###############################################################################
 # Test reading ArcGIS 9.3 .aux.xml
@@ -3127,3 +3128,44 @@ def test_tiff_read_ModelTiepointTag_z_non_zero_but_ModelPixelScaleTag_z_zero():
     ds = gdal.Open('data/ModelTiepointTag_z_non_zero_but_ModelPixelScaleTag_z_zero.tif')
     assert ds.GetRasterBand(1).GetScale() == 1
     assert ds.GetRasterBand(1).GetOffset() == 0
+
+
+###############################################################################
+# Test strip chopping on uncompressed fies with strips larger than 2 GB
+
+def test_tiff_read_strip_larger_than_2GB():
+
+    if not check_libtiff_internal_or_at_least(4, 0, 11):
+        pytest.skip()
+
+    ds = gdal.Open('data/strip_larger_than_2GB_header.tif')
+    assert ds
+    assert ds.GetRasterBand(1).GetBlockSize() == [50000, 10737]
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_OFFSET_0_0', 'TIFF') == '264'
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_SIZE_0_0', 'TIFF') == '536850000'
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_OFFSET_0_1', 'TIFF') == '536850264'
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_SIZE_0_1', 'TIFF') == '536850000'
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_OFFSET_0_5', 'TIFF') == '2684250264'
+    assert ds.GetRasterBand(1).GetMetadataItem('BLOCK_SIZE_0_5', 'TIFF') == '65750000'
+
+###############################################################################
+# Test reading a deflate compressed file with a uncompressed strip larger than 4 GB
+
+def test_tiff_read_deflate_4GB():
+
+    if not check_libtiff_internal_or_at_least(4, 0, 11):
+        pytest.skip()
+
+    ds = gdal.Open('/vsizip/data/test_deflate_4GB.tif.zip/test_deflate_4GB.tif')
+    if sys.maxsize < 2**32:
+        assert ds is None
+        return
+    assert ds is not None
+
+    if not gdaltest.run_slow_tests():
+        pytest.skip()
+
+    data  = ds.ReadRaster(0, 0, ds.RasterXSize, ds.RasterYSize, buf_xsize = 20, buf_ysize = 20)
+    ref_ds = gdal.GetDriverByName('MEM').Create('', 20, 20)
+    ref_ds.GetRasterBand(1).Fill(127)
+    assert data == ref_ds.ReadRaster()

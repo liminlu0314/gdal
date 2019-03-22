@@ -103,8 +103,14 @@ class MBTilesDataset final: public GDALPamDataset, public GDALGPKGMBTilesLikePse
 
     virtual CPLErr GetGeoTransform(double* padfGeoTransform) override;
     virtual CPLErr SetGeoTransform( double* padfGeoTransform ) override;
-    virtual const char* GetProjectionRef() override;
-    virtual CPLErr SetProjection( const char* pszProjection ) override;
+    virtual const char* _GetProjectionRef() override;
+    virtual CPLErr _SetProjection( const char* pszProjection ) override;
+    const OGRSpatialReference* GetSpatialRef() const override {
+        return GetSpatialRefFromOldGetProjectionRef();
+    }
+    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override {
+        return OldSetProjectionFromSetSpatialRef(poSRS);
+    }
 
     virtual char      **GetMetadataDomainList() override;
     virtual char      **GetMetadata( const char * pszDomain = "" ) override;
@@ -1209,6 +1215,11 @@ bool MBTilesDataset::InitRaster ( MBTilesDataset* poParentDS,
         return false;
     }
 
+    if( poParentDS )
+    {
+        eAccess = poParentDS->eAccess;
+    }
+
     for(int i = 1; i <= nBandCount; i ++)
         SetBand( i, new MBTilesBand(this, nTileSize) );
 
@@ -1221,7 +1232,6 @@ bool MBTilesDataset::InitRaster ( MBTilesDataset* poParentDS,
     {
         m_poParentDS = poParentDS;
         poMainDS = poParentDS;
-        eAccess = poParentDS->eAccess;
         hDS = poParentDS->hDS;
         hDB = poParentDS->hDB;
         m_eTF = poParentDS->m_eTF;
@@ -1240,7 +1250,7 @@ bool MBTilesDataset::InitRaster ( MBTilesDataset* poParentDS,
 /*                         GetProjectionRef()                           */
 /************************************************************************/
 
-const char* MBTilesDataset::GetProjectionRef()
+const char* MBTilesDataset::_GetProjectionRef()
 {
     return SRS_EPSG_3857;
 }
@@ -1249,7 +1259,7 @@ const char* MBTilesDataset::GetProjectionRef()
 /*                           SetProjection()                            */
 /************************************************************************/
 
-CPLErr MBTilesDataset::SetProjection( const char* pszProjection )
+CPLErr MBTilesDataset::_SetProjection( const char* pszProjection )
 {
     if( eAccess != GA_Update )
     {
