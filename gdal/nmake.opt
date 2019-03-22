@@ -556,12 +556,12 @@ NETCDF_INC_DIR=E:\GDAL\gdal_need\NetCDF-4.6.2\include
 # Uncomment the following lines to link PROJ library statically. Otherwise
 # it will be linked dynamically during runtime.
 # To use the new API of proj5 or later, use
-PROJ_FLAGS = -DPROJ_STATIC -DPROJ_VERSION=5
+#PROJ_FLAGS = -DPROJ_STATIC -DPROJ_VERSION=5
 # for proj 4.x:
 #PROJ_FLAGS = -DPROJ_STATIC -DPROJ_VERSION=4
 
 PROJ_INCLUDE = -IE:\GDAL\gdal_need\proj\include
-PROJ_LIBRARY = E:\GDAL\gdal_need\proj\lib\proj.lib
+PROJ_LIBRARY = E:\GDAL\gdal_need\proj\lib\proj_i.lib
 
 # Add ORACLE support.
 # Uncomment the following line to enable OCI Oracle Spatial support.
