@@ -125,7 +125,7 @@ void OCTDestroyCoordinateTransformationOptions(
 /** \brief Sets an area of interest.
  *
  * The west longitude is generally lower than the east longitude, except for
- * areas of interest that go accross the anti-meridian.
+ * areas of interest that go across the anti-meridian.
  *
  * @param dfWestLongitudeDeg West longitude (in degree). Must be in [-180,180]
  * @param dfSouthLatitudeDeg South latitude (in degree). Must be in [-90,90]
@@ -207,8 +207,8 @@ int OCTCoordinateTransformationOptionsSetAreaOfInterest(
  * SRS.
  *
  * The pipeline may be provided as a PROJ string (single step operation or
- * multiple step string starting with +proj=pipeline), or a WKT2 string
- * describing a CoordinateOperation.
+ * multiple step string starting with +proj=pipeline), a WKT2 string describing
+ * a CoordinateOperation, or a "urn:ogc:def:coordinateOperation:EPSG::XXXX" URN
  *
  * @param pszCO PROJ or WKT string describing a coordinate operation
  * @param bReverseCO Whether the PROJ or WKT string should be evaluated in the reverse path
@@ -1588,8 +1588,9 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
                                 y, sizeof(double), nCount,
                                 z, z ? sizeof(double) : 0, z ? nCount : 0,
                                 t, t ? sizeof(double) : 0, t ? nCount : 0);
-        err == ( static_cast<int>(nRet) == nCount ) ?
+        err = ( static_cast<int>(nRet) == nCount ) ?
                     0 : proj_context_errno(ctx);
+        if( err == 0 )
         {
             memcpy(padfTargetX, x, sizeof(double) * nCount);
             memcpy(padfTargetY, y, sizeof(double) * nCount);
@@ -1607,8 +1608,9 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
                 padfTargetY, sizeof(double), nCount,
                 z ? padfTargetZ : nullptr, z ? sizeof(double) : 0, z ? nCount : 0,
                 t ? padfTargetT : nullptr, t ? sizeof(double) : 0, t ? nCount : 0);
-            err == ( static_cast<int>(nRet) == nCount ) ?
+            err = ( static_cast<int>(nRet) == nCount ) ?
                     0 : proj_context_errno(ctx);
+            if( err == 0 )
             {
                 for( int i = 0; i < nCount; i++ )
                 {
@@ -1630,7 +1632,7 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
                                 y, sizeof(double), nCount,
                                 z, z ? sizeof(double) : 0, z ? nCount : 0,
                                 t, t ? sizeof(double) : 0, t ? nCount : 0);
-        err == ( static_cast<int>(nRet) == nCount ) ?
+        err = ( static_cast<int>(nRet) == nCount ) ?
                     0 : proj_context_errno(ctx);
     }
 

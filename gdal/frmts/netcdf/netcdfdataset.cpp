@@ -3269,14 +3269,20 @@ void netCDFDataset::SetProjectionFromVar( int nGroupId, int nVarId,
             CPLDebug("GDAL_netCDF", "set bBottomUp = %d from Y axis",
                     static_cast<int>(poDS->bBottomUp));
 
-            // Convert ]180,360] longitude values to [-180,180].
+            // Convert ]180,540] longitude values to ]-180,0].
             if( NCDFIsVarLongitude(nGroupDimXID, nVarDimXID, nullptr) &&
                 CPLTestBool(CPLGetConfigOption("GDAL_NETCDF_CENTERLONG_180",
                                             "YES")) )
             {
                 // If minimum longitude is > 180, subtract 360 from all.
-                if( std::min(pdfXCoord[0], pdfXCoord[xdim - 1]) > 180.0 )
+                // Add a check on the maximum X value too, since NCDFIsVarLongitude()
+                // is not very specific by default (see https://github.com/OSGeo/gdal/issues/1440)
+                if( std::min(pdfXCoord[0], pdfXCoord[xdim - 1]) > 180.0 &&
+                    std::max(pdfXCoord[0], pdfXCoord[xdim - 1]) <= 540 )
                 {
+                    CPLDebug("GDAL_netCDF",
+                             "Offseting longitudes from ]180,540] to ]-180,180]. "
+                             "Can be disabled with GDAL_NETCDF_CENTERLONG_180=NO");
                     for( size_t i = 0; i < xdim; i++ )
                             pdfXCoord[i] -= 360;
                 }
@@ -3357,11 +3363,12 @@ void netCDFDataset::SetProjectionFromVar( int nGroupId, int nVarId,
         }
         else
         {
-            bool nWestIsLeft = (pdfXCoord[0] < pdfXCoord[xdim - 1]);
+            bool bWestIsLeft = (pdfXCoord[0] < pdfXCoord[xdim - 1]);
 
             // fix longitudes if longitudes should increase from 
             // west to east, but west > east
-            if (!nWestIsLeft)
+            if (NCDFIsVarLongitude(nGroupDimXID, nVarDimXID, nullptr) &&
+                !bWestIsLeft)
             {
                 size_t ndecreases = 0;
 
@@ -3937,12 +3944,12 @@ int netCDFDataset::ProcessCFGeolocation( int nGroupId, int nVarId )
                     CPLString osTMP;
                     osTMP.Printf("NETCDF:\"%s\":%s",
                                  osFilename.c_str(), pszGeolocXFullName);
-                    CPLFree(pszGeolocXFullName);
+
                     SetMetadataItem("X_DATASET", osTMP, "GEOLOCATION");
                     SetMetadataItem("X_BAND", "1" , "GEOLOCATION");
                     osTMP.Printf("NETCDF:\"%s\":%s",
                                  osFilename.c_str(), pszGeolocYFullName);
-                    CPLFree(pszGeolocYFullName);
+
                     SetMetadataItem("Y_DATASET", osTMP, "GEOLOCATION");
                     SetMetadataItem("Y_BAND", "1", "GEOLOCATION");
 
@@ -3958,6 +3965,8 @@ int netCDFDataset::ProcessCFGeolocation( int nGroupId, int nVarId )
                              "lat/lon variables specified by the coordinates "
                              "attribute [%s]", pszTemp);
                 }
+                CPLFree(pszGeolocXFullName);
+                CPLFree(pszGeolocYFullName);
             }
             else
             {

@@ -1000,11 +1000,12 @@ clockwise around a top.
 
 <dt> <b>-b</b> <em>band</em>:</dt><dd> picks a particular band to get the DEM from.  Defaults to band 1.</dd>
 
-<dt> <b>-a</b> <em>name</em>:</dt><dd>provides a name for the attribute in which to put the elevation. If not provided no elevation attribute is attached. </dd>
+<dt> <b>-a</b> <em>name</em>:</dt><dd>provides a name for the attribute in which to put the elevation. If not provided no elevation attribute is attached.
+Ignored in polygonal contouring (-p) mode.</dd>
 
-<dt> <b>-amin</b> <em>name</em>:</dt><dd>(Since GDAL 2.4) provides a name for the attribute in which to put the minimum elevation of contour polygon. If not provided no minimum elevation attribute is attached. </dd>
+<dt> <b>-amin</b> <em>name</em>:</dt><dd>(Since GDAL 2.4) provides a name for the attribute in which to put the minimum elevation of contour polygon. If not provided no minimum elevation attribute is attached. Ignored in default line contouring mode.</dd>
 
-<dt> <b>-amax</b> <em>name</em>:</dt><dd>(Since GDAL 2.4) provides a name for the attribute in which to put the maximum elevation of contour polygon. If not provided no maximim elevation attribute is attached. </dd>
+<dt> <b>-amax</b> <em>name</em>:</dt><dd>(Since GDAL 2.4) provides a name for the attribute in which to put the maximum elevation of contour polygon. If not provided no maximim elevation attribute is attached. Ignored in default line contouring mode.</dd>
 
 <dt> <b>-3d</b>:</dt> <dd>
       Force production of 3D vectors instead of 2D.  Includes elevation at
@@ -1413,8 +1414,10 @@ The coordinate systems that can be passed are anything supported by the
 OGRSpatialReference.SetFromUserInput() call, which includes EPSG PCS and GCSes
 (i.e. EPSG:4296), PROJ.4 declarations (as above), or the name of a .prj file
 containing well known text.</dd>
-<dt> <b>-ct</b> <em>proj_string</em>:</dt><dd> (GDAL &gt;= 2.5)
-PROJ string overriding the default
+<dt> <b>-ct</b> <em>string</em>:</dt><dd> (GDAL &gt;= 2.5)
+A PROJ string (single step operation or multiple step string
+starting with +proj=pipeline), a WKT2 string describing a CoordinateOperation,
+or a urn:ogc:def:coordinateOperation:EPSG::XXXX URN overriding the default
 transformation from the source to the target CRS. It must take into account the
 axis order of the source and target CRS.</dd>
 <dt> <b>-to</b> <em>NAME=VALUE</em>:</dt><dd> set a transformer option suitable

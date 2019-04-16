@@ -3210,7 +3210,10 @@ double OGRGeometry::Distance( const OGRGeometry *poOtherGeom ) const
         sfcgal_geometry_t *poOther =
             OGRGeometry::OGRexportToSFCGAL(poOtherGeom);
         if (poOther == nullptr)
+        {
+            sfcgal_geometry_delete(poThis);
             return -1.0;
+        }
 
         const double dfDistance = sfcgal_geometry_distance(poThis, poOther);
 
@@ -3720,8 +3723,8 @@ OGRGeometry *OGRGeometry::ConvexHull() const
 
         sfcgal_geometry_t *poRes = sfcgal_geometry_convexhull_3d(poThis);
         OGRGeometry *h_prodGeom = SFCGALexportToOGR(poRes);
-
-        h_prodGeom->assignSpatialReference(getSpatialReference());
+        if( h_prodGeom )
+            h_prodGeom->assignSpatialReference(getSpatialReference());
 
         sfcgal_geometry_delete(poThis);
         sfcgal_geometry_delete(poRes);
@@ -4064,12 +4067,14 @@ OGRGeometry *OGRGeometry::Intersection(
             return nullptr;
 
         sfcgal_geometry_t *poOther = OGRGeometry::OGRexportToSFCGAL(poOtherGeom);
-        if (poThis == nullptr)
+        if (poOther == nullptr)
+        {
+            sfcgal_geometry_delete(poThis);
             return nullptr;
+        }
 
         sfcgal_geometry_t *poRes = sfcgal_geometry_intersection_3d(poThis, poOther);
         OGRGeometry *h_prodGeom = SFCGALexportToOGR(poRes);
-
         if (h_prodGeom != nullptr && getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference()->IsSame(getSpatialReference()))
@@ -4182,16 +4187,13 @@ OGRGeometry *OGRGeometry::Union(
 
         sfcgal_geometry_t *poOther = OGRGeometry::OGRexportToSFCGAL(poOtherGeom);
         if (poOther == nullptr)
+        {
+            sfcgal_geometry_delete(poThis);
             return nullptr;
+        }
 
         sfcgal_geometry_t *poRes = sfcgal_geometry_union_3d(poThis, poOther);
-        if (poRes == nullptr)
-            return nullptr;
-
         OGRGeometry *h_prodGeom = OGRGeometry::SFCGALexportToOGR(poRes);
-        if (h_prodGeom == nullptr)
-            return nullptr;
-
         if (h_prodGeom != nullptr && getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference()->IsSame(getSpatialReference()))
@@ -4199,6 +4201,7 @@ OGRGeometry *OGRGeometry::Union(
 
         sfcgal_geometry_delete(poThis);
         sfcgal_geometry_delete(poOther);
+        sfcgal_geometry_delete(poRes);
 
         return h_prodGeom;
 
@@ -4385,14 +4388,13 @@ OGRGeometry *OGRGeometry::Difference(
 
         sfcgal_geometry_t *poOther = OGRGeometry::OGRexportToSFCGAL(poOtherGeom);
         if (poOther == nullptr)
+        {
+            sfcgal_geometry_delete(poThis);
             return nullptr;
+        }
 
         sfcgal_geometry_t *poRes = sfcgal_geometry_difference_3d(poThis, poOther);
         OGRGeometry *h_prodGeom = OGRGeometry::SFCGALexportToOGR(poRes);
-
-        if (h_prodGeom == nullptr)
-            return nullptr;
-
         if (h_prodGeom != nullptr && getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference() != nullptr
             && poOtherGeom->getSpatialReference()->IsSame(getSpatialReference()))
@@ -6901,6 +6903,8 @@ OGRGeometry* OGRGeometry::SFCGALexportToOGR(
     UNUSED_IF_NO_SFCGAL const sfcgal_geometry_t* geometry )
 {
 #ifdef HAVE_SFCGAL
+    if( geometry == nullptr )
+        return nullptr;
 
     sfcgal_init();
     char* pabySFCGALWKT = nullptr;
@@ -6910,7 +6914,6 @@ OGRGeometry* OGRGeometry::SFCGALexportToOGR(
     memcpy(pszWKT, pabySFCGALWKT, nLength);
     pszWKT[nLength] = 0;
     free(pabySFCGALWKT);
-    const char *pszTmpWKT = pszWKT;
 
     sfcgal_geometry_type_t geom_type = sfcgal_geometry_type_id (geometry);
 
@@ -6957,10 +6960,12 @@ OGRGeometry* OGRGeometry::SFCGALexportToOGR(
     }
     else
     {
+        CPLFree(pszWKT);
         return nullptr;
     }
 
-    if( poGeom->importFromWkt(&pszTmpWKT) == OGRERR_NONE )
+    const char* pszWKTTmp = pszWKT;
+    if( poGeom->importFromWkt(&pszWKTTmp) == OGRERR_NONE )
     {
         CPLFree(pszWKT);
         return poGeom;

@@ -2336,9 +2336,10 @@ static bool GWKBilinearResample4Sample( GDALWarpKernel *poWK, int iBand,
     double dfAccumulatorDensity = 0.0;
     double dfAccumulatorDivisor = 0.0;
 
+    const GPtrDiff_t nSrcPixels = static_cast<GPtrDiff_t>(nSrcXSize) * nSrcYSize;
     // Get pixel row.
     if( iSrcY >= 0 && iSrcY < nSrcYSize
-        && iSrcOffset >= 0 && iSrcOffset < nSrcXSize * nSrcYSize
+        && iSrcOffset >= 0 && iSrcOffset < nSrcPixels
         && GWKGetPixelRow( poWK, iBand, iSrcOffset, 1,
                            adfDensity, adfReal, adfImag ) )
     {
@@ -2379,7 +2380,7 @@ static bool GWKBilinearResample4Sample( GDALWarpKernel *poWK, int iBand,
     // Get pixel row.
     if( iSrcY+1 >= 0 && iSrcY+1 < nSrcYSize
         && iSrcOffset+nSrcXSize >= 0
-        && iSrcOffset+nSrcXSize < nSrcXSize * nSrcYSize
+        && iSrcOffset+nSrcXSize < nSrcPixels
         && GWKGetPixelRow( poWK, iBand, iSrcOffset+nSrcXSize, 1,
                            adfDensity, adfReal, adfImag ) )
     {

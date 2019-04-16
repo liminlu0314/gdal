@@ -59,6 +59,9 @@
 
 CPL_CVSID("$Id$")
 
+#define STRINGIFY(s) #s
+#define XSTRINGIFY(s) STRINGIFY(s)
+
 struct OGRSpatialReference::Private
 {
     struct Listener: public OGR_SRSNode::Listener
@@ -1222,7 +1225,7 @@ void OGRSpatialReference::dumpReadable()
  * Note that the returned WKT string should be freed with
  * CPLFree() when no longer needed.  It is the responsibility of the caller.
  *
- * The WKT version can be overriden by using the OSR_WKT_FORMAT configuration
+ * The WKT version can be overridden by using the OSR_WKT_FORMAT configuration
  * option. Valid values are the one of the FORMAT option of
  * exportToWkt( char ** ppszResult, const char* const* papszOptions ) const
  *
@@ -1256,7 +1259,7 @@ OGRErr OGRSpatialReference::exportToPrettyWkt( char ** ppszResult,
  * \brief Convert this SRS into a nicely formatted WKT 1 string for display to a
  * person.
  *
- * The WKT version can be overriden by using the OSR_WKT_FORMAT configuration
+ * The WKT version can be overridden by using the OSR_WKT_FORMAT configuration
  * option. Valid values are the one of the FORMAT option of
  * exportToWkt( char ** ppszResult, const char* const* papszOptions ) const
  *
@@ -1288,7 +1291,7 @@ OGRErr CPL_STDCALL OSRExportToPrettyWkt( OGRSpatialReferenceH hSRS, char ** ppsz
  * Note that the returned WKT string should be freed with
  * CPLFree() when no longer needed.  It is the responsibility of the caller.
  *
- * The WKT version can be overriden by using the OSR_WKT_FORMAT configuration
+ * The WKT version can be overridden by using the OSR_WKT_FORMAT configuration
  * option. Valid values are the one of the FORMAT option of
  * exportToWkt( char ** ppszResult, const char* const* papszOptions ) const
  *
@@ -1445,7 +1448,7 @@ OGRErr OGRSpatialReference::exportToWkt( char ** ppszResult,
  * Consult also the <a href="wktproblems.html">OGC WKT Coordinate System Issues</a> page
  * for implementation details of WKT in OGR.
  *
- * The WKT version can be overriden by using the OSR_WKT_FORMAT configuration
+ * The WKT version can be overridden by using the OSR_WKT_FORMAT configuration
  * option. Valid values are the one of the FORMAT option of
  * exportToWkt( char ** ppszResult, const char* const* papszOptions ) const
  *
@@ -1471,6 +1474,8 @@ OGRErr CPL_STDCALL OSRExportToWkt( OGRSpatialReferenceH hSRS,
  * \brief Convert this SRS into WKT format.
  * 
  * This function is the same as OGRSpatialReference::exportToWkt(char ** ppszResult,const char* const* papszOptions ) const
+ * 
+ * @since GDAL 2.5
  */
 
 OGRErr OSRExportToWktEx( OGRSpatialReferenceH hSRS,
@@ -8445,9 +8450,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[0].name = EPSG_NAME_PARAMETER_X_AXIS_TRANSLATION;
     params[0].auth_name = "EPSG";
-    CPLString osCode0;
-    osCode0.Printf("%d", EPSG_CODE_PARAMETER_X_AXIS_TRANSLATION);
-    params[0].code = osCode0.c_str();
+    params[0].code = XSTRINGIFY(EPSG_CODE_PARAMETER_X_AXIS_TRANSLATION);
     params[0].value = dfDX;
     params[0].unit_name = "metre";
     params[0].unit_conv_factor = 1.0;
@@ -8455,9 +8458,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[1].name = EPSG_NAME_PARAMETER_Y_AXIS_TRANSLATION;
     params[1].auth_name = "EPSG";
-    CPLString osCode1;
-    osCode1.Printf("%d", EPSG_CODE_PARAMETER_Y_AXIS_TRANSLATION);
-    params[1].code = osCode1.c_str();
+    params[1].code = XSTRINGIFY(EPSG_CODE_PARAMETER_Y_AXIS_TRANSLATION);
     params[1].value = dfDY;
     params[1].unit_name = "metre";
     params[1].unit_conv_factor = 1.0;
@@ -8465,9 +8466,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[2].name = EPSG_NAME_PARAMETER_Z_AXIS_TRANSLATION;
     params[2].auth_name = "EPSG";
-    CPLString osCode2;
-    osCode2.Printf("%d", EPSG_CODE_PARAMETER_Z_AXIS_TRANSLATION);
-    params[2].code = osCode2.c_str();
+    params[2].code = XSTRINGIFY(EPSG_CODE_PARAMETER_Z_AXIS_TRANSLATION);
     params[2].value = dfDZ;
     params[2].unit_name = "metre";
     params[2].unit_conv_factor = 1.0;
@@ -8475,9 +8474,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[3].name = EPSG_NAME_PARAMETER_X_AXIS_ROTATION;
     params[3].auth_name = "EPSG";
-    CPLString osCode3;
-    osCode3.Printf("%d", EPSG_CODE_PARAMETER_X_AXIS_ROTATION);
-    params[3].code = osCode3.c_str();
+    params[3].code = XSTRINGIFY(EPSG_CODE_PARAMETER_X_AXIS_ROTATION);
     params[3].value = dfEX;
     params[3].unit_name = "arc-second";
     params[3].unit_conv_factor = 1. / 3600 * M_PI / 180;
@@ -8485,9 +8482,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[4].name = EPSG_NAME_PARAMETER_Y_AXIS_ROTATION;
     params[4].auth_name = "EPSG";
-    CPLString osCode4;
-    osCode4.Printf("%d", EPSG_CODE_PARAMETER_Y_AXIS_ROTATION);
-    params[4].code = osCode4.c_str();
+    params[4].code = XSTRINGIFY(EPSG_CODE_PARAMETER_Y_AXIS_ROTATION);
     params[4].value = dfEY;
     params[4].unit_name = "arc-second";
     params[4].unit_conv_factor = 1. / 3600 * M_PI / 180;
@@ -8495,9 +8490,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[5].name = EPSG_NAME_PARAMETER_Z_AXIS_ROTATION;
     params[5].auth_name = "EPSG";
-    CPLString osCode5;
-    osCode5.Printf("%d", EPSG_CODE_PARAMETER_Z_AXIS_ROTATION);
-    params[5].code = osCode5.c_str();
+    params[5].code = XSTRINGIFY(EPSG_CODE_PARAMETER_Z_AXIS_ROTATION);
     params[5].value = dfEZ;
     params[5].unit_name = "arc-second";
     params[5].unit_conv_factor = 1. / 3600 * M_PI / 180;
@@ -8505,9 +8498,7 @@ OGRErr OGRSpatialReference::SetTOWGS84( double dfDX, double dfDY, double dfDZ,
 
     params[6].name = EPSG_NAME_PARAMETER_SCALE_DIFFERENCE;
     params[6].auth_name = "EPSG";
-    CPLString osCode6;
-    osCode6.Printf("%d", EPSG_CODE_PARAMETER_SCALE_DIFFERENCE);
-    params[6].code = osCode6.c_str();
+    params[6].code = XSTRINGIFY(EPSG_CODE_PARAMETER_SCALE_DIFFERENCE);
     params[6].value = dfPPM;
     params[6].unit_name = "parts per million";
     params[6].unit_conv_factor = 1e-6;
@@ -9527,6 +9518,12 @@ OGRErr OSRImportFromProj4( OGRSpatialReferenceH hSRS, const char *pszProj4 )
 OGRErr OGRSpatialReference::importFromProj4( const char * pszProj4 )
 
 {
+    if( strlen(pszProj4) >= 10000 )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "Too long PROJ string");
+        return OGRERR_CORRUPT_DATA;
+    }
+
 /* -------------------------------------------------------------------- */
 /*      Clear any existing definition.                                  */
 /* -------------------------------------------------------------------- */
