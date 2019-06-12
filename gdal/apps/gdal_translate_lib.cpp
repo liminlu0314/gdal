@@ -192,6 +192,9 @@ struct GDALTranslateOptions
         GDAL/OGR forms, complete WKT, PROJ.4, EPSG:n or a file containing the WKT. */
     char *pszOutputSRS;
 
+    /*! does not copy source GCP into destination dataset (when TRUE) */
+    bool bNoGCP;
+
     /*! number of GCPS to be added to the output dataset */
     int nGCPCount;
 
@@ -555,7 +558,7 @@ GDALDatasetH GDALTranslate( const char *pszDest, GDALDatasetH hSrcDataset,
 
     if(pbUsageError)
         *pbUsageError = FALSE;
-
+ 
     if(psOptions->adfULLR[0] != 0.0 || psOptions->adfULLR[1] != 0.0 || psOptions->adfULLR[2] != 0.0 || psOptions->adfULLR[3] != 0.0)
         bGotBounds = true;
 
@@ -882,6 +885,36 @@ GDALDatasetH GDALTranslate( const char *pszDest, GDALDatasetH hSrcDataset,
         return nullptr;
     }
 
+/* -------------------------------------------------------------------- */
+/*      Make sure we cleanup if there is an existing dataset of this    */
+/*      name.  But even if that seems to fail we will continue since    */
+/*      it might just be a corrupt file or something.                   */
+/*      This is needed for                                              */
+/*      gdal_translate foo.tif foo.tif.ovr -outsize 50% 50%             */
+/* -------------------------------------------------------------------- */
+    if( !CPLFetchBool(psOptions->papszCreateOptions, "APPEND_SUBDATASET", false) )
+    {
+        // Someone issuing Create("foo.tif") on a
+        // memory driver doesn't expect files with those names to be deleted
+        // on a file system...
+        // This is somewhat messy. Ideally there should be a way for the
+        // driver to overload the default behaviour
+        if( !EQUAL(psOptions->pszFormat, "MEM") &&
+            !EQUAL(psOptions->pszFormat, "Memory") )
+        {
+            GDALDriver::FromHandle(hDriver)->QuietDelete( pszDest );
+        }
+        // Make sure to load early overviews, so that on the GTiff driver
+        // external .ovr is looked for before it might be created as the
+        // output dataset !
+        if( GDALGetRasterCount( hSrcDataset ) )
+        {
+            auto hBand = GDALGetRasterBand(hSrcDataset, 1);
+            if( hBand )
+                GDALGetOverviewCount(hBand);
+        }
+    }
+
     char** papszDriverMD = GDALGetMetadata(hDriver, nullptr);
 
     if( !CPLTestBool( CSLFetchNameValueDef(papszDriverMD,
@@ -927,6 +960,7 @@ GDALDatasetH GDALTranslate( const char *pszDest, GDALDatasetH hSrcDataset,
         && CSLCount(psOptions->papszMetadataOptions) == 0 && bAllBandsInOrder
         && psOptions->eMaskMode == MASK_AUTO
         && bSpatialArrangementPreserved
+        && !psOptions->bNoGCP
         && psOptions->nGCPCount == 0 && !bGotBounds
         && psOptions->pszOutputSRS == nullptr && !psOptions->bSetNoData && !psOptions->bUnsetNoData
         && psOptions->nRGBExpand == 0 && !psOptions->bNoRAT
@@ -1215,7 +1249,7 @@ GDALDatasetH GDALTranslate( const char *pszDest, GDALDatasetH hSrcDataset,
         poVDS->SetGCPs( psOptions->nGCPCount, psOptions->pasGCPs, pszGCPProjection );
     }
 
-    else if( GDALGetGCPCount( hSrcDataset ) > 0 )
+    else if( !psOptions->bNoGCP && GDALGetGCPCount( hSrcDataset ) > 0 )
     {
         const int nGCPs = GDALGetGCPCount(hSrcDataset);
 
@@ -2104,6 +2138,7 @@ GDALTranslateOptions *GDALTranslateOptionsNew(char** papszArgv, GDALTranslateOpt
     psOptions->dfLRX = 0.0;
     psOptions->dfLRY = 0.0;
     psOptions->pszOutputSRS = nullptr;
+    psOptions->bNoGCP = false;
     psOptions->nGCPCount = 0;
     psOptions->pasGCPs = nullptr;
     psOptions->adfULLR[0] = 0;
@@ -2253,6 +2288,10 @@ GDALTranslateOptions *GDALTranslateOptionsNew(char** papszArgv, GDALTranslateOpt
         {
             if( psOptionsForBinary )
                 psOptionsForBinary->bCopySubDatasets = TRUE;
+        }
+        else if (EQUAL(papszArgv[i], "-nogcp"))
+        {
+            psOptions->bNoGCP = true;
         }
         else if( i + 4 < argc && EQUAL(papszArgv[i],"-gcp") )
         {
@@ -2645,6 +2684,14 @@ GDALTranslateOptions *GDALTranslateOptionsNew(char** papszArgv, GDALTranslateOpt
             GDALTranslateOptionsFree(psOptions);
             return nullptr;
         }
+    }
+
+    if (psOptions->nGCPCount > 0 && psOptions->bNoGCP)
+    {
+        CPLError(CE_Failure, CPLE_IllegalArg,
+                 "-nogcp and -gcp cannot be used as the same time" );
+        GDALTranslateOptionsFree(psOptions);
+        return nullptr;
     }
 
     if( bOutsideExplicitlySet &&

@@ -199,6 +199,8 @@ void CPL_DLL GDALRegister_SIGDEM(void);
 void CPL_DLL GDALRegister_BYN(void);
 void CPL_DLL GDALRegister_IGNFHeightASCIIGrid(void);
 void CPL_DLL GDALRegister_TileDB(void);
+void CPL_DLL GDALRegister_DAAS(void);
+void CPL_DLL GDALRegister_COG(void);
 void CPL_DLL GDALRegister_TFATMBTiles(void);
 CPL_C_END
 

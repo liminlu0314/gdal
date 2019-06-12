@@ -764,15 +764,17 @@ OGRCreateCoordinateTransformation( const OGRSpatialReference *poSource,
 /**
  * Context for coordinate transformation.
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 struct CPL_DLL OGRCoordinateTransformationOptions
 {
+/*! @cond Doxygen_Suppress */
 private:
     friend class OGRProjCT;
     struct Private;
     std::unique_ptr<Private> d;
+/*! @endcond */
 
 public:
     OGRCoordinateTransformationOptions();
@@ -784,6 +786,10 @@ public:
                            double dfNorthLatitudeDeg);
 
     bool SetCoordinateOperation(const char* pszCT, bool bReverseCT);
+/*! @cond Doxygen_Suppress */
+    void SetSourceCenterLong(double dfCenterLong);
+    void SetTargetCenterLong(double dfCenterLong);
+/*! @endcond */
 };
 
 

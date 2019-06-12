@@ -51,10 +51,19 @@ toff_t GTIFFWriteDirectory( TIFF *hTIFF, int nSubfileType,
                             const char* pszJPEGQuality,
                             const char* pszJPEGTablesMode,
                             const char* pszNoData,
-                            const uint32* panLercAddCompressionAndVersion );
+                            const uint32* panLercAddCompressionAndVersion,
+                            bool DeferStrileArrayWriting );
 
 void GTIFFBuildOverviewMetadata( const char *pszResampling,
                                  GDALDataset *poBaseDS,
                                  CPLString &osMetadata );
+
+CPLErr CPL_DLL
+GTIFFBuildOverviewsEx( const char * pszFilename,
+                       int nBands, GDALRasterBand **papoBandList,
+                       int nOverviews, int * panOverviewList,
+                       const char * pszResampling,
+                       const char* const* papszOptions,
+                       GDALProgressFunc pfnProgress, void * pProgressData );
 
 #endif

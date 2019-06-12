@@ -645,9 +645,13 @@ static bool VSICurlIsS3LikeSignedURL( const char* pszURL )
 {
     return
         (strstr(pszURL, ".s3.amazonaws.com/") != nullptr ||
-         strstr(pszURL, ".storage.googleapis.com/") != nullptr) &&
+         strstr(pszURL, ".s3.amazonaws.com:") != nullptr ||
+         strstr(pszURL, ".storage.googleapis.com/") != nullptr ||
+         strstr(pszURL, ".storage.googleapis.com:") != nullptr) &&
         (strstr(pszURL, "&Signature=") != nullptr ||
-         strstr(pszURL, "?Signature=") != nullptr);
+         strstr(pszURL, "?Signature=") != nullptr ||
+         strstr(pszURL, "&X-Amz-Signature=") != nullptr ||
+         strstr(pszURL, "?X-Amz-Signature=") != nullptr);
 }
 
 /************************************************************************/
@@ -659,9 +663,16 @@ static GIntBig VSICurlGetExpiresFromS3LikeSignedURL( const char* pszURL )
     const char* pszExpires = strstr(pszURL, "&Expires=");
     if( pszExpires == nullptr )
         pszExpires = strstr(pszURL, "?Expires=");
+    if( pszExpires != nullptr )
+        return CPLAtoGIntBig(pszExpires + strlen("&Expires="));
+
+    pszExpires = strstr(pszURL, "?X-Amz-Expires=");
     if( pszExpires == nullptr )
-        return 0;
-    return CPLAtoGIntBig(pszExpires + strlen("&Expires="));
+        pszExpires = strstr(pszURL, "?X-Amz-Expires=");
+    if( pszExpires != nullptr )
+        return CPLAtoGIntBig(pszExpires + strlen("&X-Amz-Expires="));
+
+    return 0;
 }
 
 /************************************************************************/
@@ -1589,10 +1600,9 @@ size_t VSICurlHandle::Read( void * const pBufferIn, size_t const nSize,
             // Ensure that we will request at least the number of blocks
             // to satisfy the remaining buffer size to read.
             const vsi_l_offset nEndOffsetToDownload =
-                ((iterOffset + nBufferRequestSize) / DOWNLOAD_CHUNK_SIZE) *
+                ((iterOffset + nBufferRequestSize + DOWNLOAD_CHUNK_SIZE - 1) / DOWNLOAD_CHUNK_SIZE) *
                 DOWNLOAD_CHUNK_SIZE;
             const int nMinBlocksToDownload =
-                1 +
                 static_cast<int>(
                     (nEndOffsetToDownload - nOffsetToDownload) /
                     DOWNLOAD_CHUNK_SIZE);
@@ -2764,6 +2774,14 @@ bool VSICurlFilesystemHandler::IsAllowedFilename( const char* pszFilename )
     {
         char** papszExtensions =
             CSLTokenizeString2( pszAllowedExtensions, ", ", 0 );
+        const char *queryStart = strchr(pszFilename, '?');
+        char *pszFilenameWithoutQuery = nullptr;
+        if (queryStart != nullptr)
+        {
+            pszFilenameWithoutQuery = CPLStrdup(pszFilename);
+            pszFilenameWithoutQuery[queryStart - pszFilename]='\0';
+            pszFilename = pszFilenameWithoutQuery;
+        }
         const size_t nURLLen = strlen(pszFilename);
         bool bFound = false;
         for( int i = 0; papszExtensions[i] != nullptr; i++ )
@@ -2788,6 +2806,9 @@ bool VSICurlFilesystemHandler::IsAllowedFilename( const char* pszFilename )
         }
 
         CSLDestroy(papszExtensions);
+        if( pszFilenameWithoutQuery ) {
+            CPLFree(pszFilenameWithoutQuery);
+        }
 
         return bFound;
     }

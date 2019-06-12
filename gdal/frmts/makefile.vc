@@ -150,7 +150,7 @@ EXTRAFLAGS	=	$(EXTRAFLAGS) -DFRMT_grib
 !ENDIF
 
 !IFDEF CURL_LIB
-EXTRAFLAGS	=	$(EXTRAFLAGS) -DFRMT_wcs -DFRMT_wms -DFRMT_plmosaic -DFRMT_wmts -DFRMT_rda -DFRMT_eeda
+EXTRAFLAGS	=	$(EXTRAFLAGS) -DFRMT_wcs -DFRMT_wms -DFRMT_plmosaic -DFRMT_wmts -DFRMT_rda -DFRMT_eeda -DFRMT_daas
 !ENDIF
 
 !IFDEF SDE_ENABLED
@@ -257,8 +257,3 @@ plugins-install:
 		&& $(MAKE) /f makefile.vc plugin-install \
 		&& cd .. \
 		|| exit 1
-
-html-install:
-	copy *.html $(HTMLDIR)
-	-for %d in ( $(DIRLIST) ) do \
-		copy %d\frmt_*.html $(HTMLDIR)

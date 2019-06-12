@@ -72,7 +72,8 @@ INCDIR = "$(GDAL_HOME)\include"
 DATADIR = "$(GDAL_HOME)\data"
 !ENDIF
 !IFNDEF HTMLDIR
-HTMLDIR = "$(GDAL_HOME)\html"
+# If you want the documentation to be build define a directory
+# HTMLDIR = "$(GDAL_HOME)\html"
 !ENDIF
 
 # Set this to the installed directory containing python.  If you don't
@@ -204,7 +205,7 @@ STDCALL=YES
 # Version number embedded in DLL name. 
 # If GDAL version is X.Y.Z, VERSION = X * 100 + Y
 !IFNDEF VERSION
-VERSION =	204
+VERSION =	300
 !ENDIF
 
 # Comment the following out if you want PAM supported disabled
@@ -290,12 +291,9 @@ JPEG12_SUPPORTED = 1
 #PNGDIR = c:/projects/libpng-1.0.8
 #PNG_LIB = $(PNGDIR)/libpng.lib
 
-# if using an external libtiff library
+# if using an external libtiff library. Must be libtiff >= 4.0
 #TIFF_INC =	-Ic:/warmerda/libtiff/libtiff
 #TIFF_LIB =	c:/warmerda/libtiff/libtiff/libtiff_i.lib
-# uncomment following line, if you have libtiff version >= 4.0 to
-# enable BigTIFF support
-#TIFF_OPTS=	-DBIGTIFF_SUPPORT
 
 # if using an external libgeotiff library
 #GEOTIFF_INC =   -Ic:/warmerda/libgeotiff -Ic:/warmerda/libgeotiff/libxtiff
@@ -433,9 +431,12 @@ EXPAT_LIB = $(EXPAT_DIR)/x64/libexpat.lib
 #KAKDIR = C:\0_PGH\SRC_CSD\CSD_INTEGRATION\cots\kakadu\download\dev
 #KAKLIB = $(KAKDIR)\lib_x64\kdu_v79R.lib 	$(KAKDIR)\lib_x64\kdu_a79R.lib
 #KAKSRC = $(KAKDIR)\v7_9_1-01156C
+#KAKEXTRAINC=-I$(KAKDIR)
 #KAKOBJDIR =  $(KAKDIR)\v7_generated_x86
-KAKADU_7_5_OR_LATER = YES
 #JP2KAK_PLUGIN = YES
+!IFNDEF KAKADU_7_5_OR_LATER
+KAKADU_7_5_OR_LATER = YES
+!ENDIF
 
 # Uncomment the following and update to enable NCSA HDF Release 4 support.
 #HDF4_PLUGIN = YES

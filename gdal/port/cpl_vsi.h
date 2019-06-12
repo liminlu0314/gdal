@@ -310,8 +310,12 @@ VSIDIR CPL_DLL *VSIOpenDir( const char *pszPath,
                             int nRecurseDepth,
                             const char* const *papszOptions);
 
+/*! @cond Doxygen_Suppress */
+typedef struct VSIDIREntry VSIDIREntry;
+/*! @endcond */
+
 /** Directory entry. */
-typedef struct VSIDIREntry
+struct VSIDIREntry
 {
     /** Filename */
     char*        pszName;
@@ -338,7 +342,7 @@ typedef struct VSIDIREntry
     VSIDIREntry& operator=(VSIDIREntry&) = delete;
 /*! @endcond */
 #endif
-} VSIDIREntry;
+};
 
 const VSIDIREntry CPL_DLL *VSIGetNextDirEntry(VSIDIR* dir);
 void CPL_DLL VSICloseDir(VSIDIR* dir);
@@ -407,7 +411,7 @@ typedef size_t (*VSIWriteFunction)(const void* ptr, size_t size, size_t nmemb, F
 void CPL_DLL VSIStdoutSetRedirection( VSIWriteFunction pFct, FILE* stream );
 
 /**
- * Return information about a handle. Optional (driver dependant) 
+ * Return information about a handle. Optional (driver dependent) 
  * @since GDAL 2.5
  */
 typedef int            (*VSIFilesystemPluginStatCallback)          ( void *pUserData, const char *pszFilename, VSIStatBufL *pStatBuf, int nFlags );
@@ -485,7 +489,7 @@ typedef size_t         (*VSIFilesystemPluginWriteCallback)         ( void *pFile
  */
 typedef int            (*VSIFilesystemPluginFlushCallback)         ( void *pFile );
 /** 
- * Truncate handle. Mandatory (driver dependant?) for write handles 
+ * Truncate handle. Mandatory (driver dependent?) for write handles 
  */
 typedef int            (*VSIFilesystemPluginTruncateCallback)      ( void *pFile, vsi_l_offset nNewSize );
 /** 

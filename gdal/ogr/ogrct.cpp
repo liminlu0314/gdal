@@ -62,6 +62,12 @@ struct OGRCoordinateTransformationOptions::Private
 
     CPLString osCoordOperation{};
     bool bReverseCO = false;
+
+    bool bHasSourceCenterLong = false;
+    double dfSourceCenterLong = 0.0;
+
+    bool bHasTargetCenterLong = false;
+    double dfTargetCenterLong = 0.0;
 };
 
 /************************************************************************/
@@ -70,7 +76,7 @@ struct OGRCoordinateTransformationOptions::Private
 
 /** \brief Constructs a new OGRCoordinateTransformationOptions.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OGRCoordinateTransformationOptions::OGRCoordinateTransformationOptions():
     d(new Private())
@@ -83,7 +89,7 @@ OGRCoordinateTransformationOptions::OGRCoordinateTransformationOptions():
 
 /** \brief Destroys a OGRCoordinateTransformationOptions.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OGRCoordinateTransformationOptions::~OGRCoordinateTransformationOptions()
 {
@@ -97,7 +103,7 @@ OGRCoordinateTransformationOptions::~OGRCoordinateTransformationOptions()
  *
  * To be freed with OCTDestroyCoordinateTransformationOptions()
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OGRCoordinateTransformationOptionsH OCTNewCoordinateTransformationOptions(void)
 {
@@ -110,7 +116,7 @@ OGRCoordinateTransformationOptionsH OCTNewCoordinateTransformationOptions(void)
 
 /** \brief Destroy coordinate transformation options.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 void OCTDestroyCoordinateTransformationOptions(
                             OGRCoordinateTransformationOptionsH hOptions)
@@ -133,7 +139,7 @@ void OCTDestroyCoordinateTransformationOptions(
  * @param dfNorthLatitudeDeg North latitude (in degree). Must be in [-90,90]
  * @return true in case of success.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 bool OGRCoordinateTransformationOptions::SetAreaOfInterest(
         double dfWestLongitudeDeg, double dfSouthLatitudeDeg,
@@ -181,7 +187,7 @@ bool OGRCoordinateTransformationOptions::SetAreaOfInterest(
  *
  * See OGRCoordinateTransformationOptions::SetAreaOfInterest()
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 int OCTCoordinateTransformationOptionsSetAreaOfInterest(
     OGRCoordinateTransformationOptionsH hOptions,
@@ -214,7 +220,7 @@ int OCTCoordinateTransformationOptionsSetAreaOfInterest(
  * @param bReverseCO Whether the PROJ or WKT string should be evaluated in the reverse path
  * @return true in case of success.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 bool OGRCoordinateTransformationOptions::SetCoordinateOperation(const char* pszCO, bool bReverseCO)
 {
@@ -224,6 +230,30 @@ bool OGRCoordinateTransformationOptions::SetCoordinateOperation(const char* pszC
 }
 
 /************************************************************************/
+/*                         SetSourceCenterLong()                        */
+/************************************************************************/
+
+/*! @cond Doxygen_Suppress */
+void OGRCoordinateTransformationOptions::SetSourceCenterLong(double dfCenterLong)
+{
+    d->dfSourceCenterLong = dfCenterLong;
+    d->bHasSourceCenterLong = true;
+}
+/*! @endcond */
+
+/************************************************************************/
+/*                         SetTargetCenterLong()                        */
+/************************************************************************/
+
+/*! @cond Doxygen_Suppress */
+void OGRCoordinateTransformationOptions::SetTargetCenterLong(double dfCenterLong)
+{
+    d->dfTargetCenterLong = dfCenterLong;
+    d->bHasTargetCenterLong = true;
+}
+/*! @endcond */
+
+/************************************************************************/
 /*            OCTCoordinateTransformationOptionsSetOperation()          */
 /************************************************************************/
 
@@ -231,7 +261,7 @@ bool OGRCoordinateTransformationOptions::SetCoordinateOperation(const char* pszC
  *
  * See OGRCoordinateTransformationOptions::SetCoordinateTransformation()
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 int OCTCoordinateTransformationOptionsSetOperation(
     OGRCoordinateTransformationOptionsH hOptions,
@@ -244,6 +274,7 @@ int OCTCoordinateTransformationOptionsSetOperation(
 /*                              OGRProjCT                               */
 /************************************************************************/
 
+//! @cond Doxygen_Suppress
 class OGRProjCT : public OGRCoordinateTransformation
 {
     CPL_DISALLOW_COPY_ASSIGN(OGRProjCT)
@@ -334,6 +365,7 @@ public:
     void SetEmitErrors( bool bEmitErrors ) override
         { m_bEmitErrors = bEmitErrors; }
 };
+//! @endcond
 
 /************************************************************************/
 /*                 OCTDestroyCoordinateTransformation()                 */
@@ -397,7 +429,7 @@ void OGRCoordinateTransformation::DestroyCT( OGRCoordinateTransformation* poCT )
  * 
  * This will honour the axis order advertized by the source and target SRS,
  * as well as their "data axis to SRS axis mapping".
- * To have a behaviour similar to GDAL &lt; 2.5, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
+ * To have a behaviour similar to GDAL &lt; 3.0, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
  * configuration option can be set to YES.
  *
  * @param poSource source spatial reference system.
@@ -427,7 +459,7 @@ OGRCreateCoordinateTransformation( const OGRSpatialReference *poSource,
  * 
  * This will honour the axis order advertized by the source and target SRS,
  * as well as their "data axis to SRS axis mapping".
- * To have a behaviour similar to GDAL &lt; 2.5, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
+ * To have a behaviour similar to GDAL &lt; 3.0, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
  * configuration option can be set to YES.
  *
  * The source SRS and target SRS should generally not be NULL. This is only
@@ -446,7 +478,7 @@ OGRCreateCoordinateTransformation( const OGRSpatialReference *poSource,
  * @param poTarget target spatial reference system.
  * @param options Coordinate transformation options.
  * @return NULL on failure or a ready to use transformation object.
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 OGRCoordinateTransformation*
@@ -483,7 +515,7 @@ OGRCreateCoordinateTransformation( const OGRSpatialReference *poSource,
  * 
  * This will honour the axis order advertized by the source and target SRS,
  * as well as their "data axis to SRS axis mapping".
- * To have a behaviour similar to GDAL &lt; 2.5, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
+ * To have a behaviour similar to GDAL &lt; 3.0, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
  * configuration option can be set to YES.
  *
  * @param hSourceSRS source spatial reference system.
@@ -522,7 +554,7 @@ OCTNewCoordinateTransformation(
  *
  * This will honour the axis order advertized by the source and target SRS,
  * as well as their "data axis to SRS axis mapping".
- * To have a behaviour similar to GDAL &lt; 2.5, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
+ * To have a behaviour similar to GDAL &lt; 3.0, the OGR_CT_FORCE_TRADITIONAL_GIS_ORDER
  * configuration option can be set to YES.
  *
  * If options contains a user defined coordinate transformation pipeline, it
@@ -538,7 +570,7 @@ OCTNewCoordinateTransformation(
  * @param hTargetSRS target spatial reference system.
  * @param hOptions Coordinate transformation options.
  * @return NULL on failure or a ready to use transformation object.
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 OGRCoordinateTransformationH
@@ -559,6 +591,7 @@ OCTNewCoordinateTransformationEx(
 /*                             OGRProjCT()                             */
 /************************************************************************/
 
+//! @cond Doxygen_Suppress
 OGRProjCT::OGRProjCT()
 {
 }
@@ -616,7 +649,7 @@ int OGRProjCT::Initialize( const OGRSpatialReference * poSourceIn,
     if( poTargetIn )
         poSRSTarget = poTargetIn->Clone();
 
-    // To easy quick&dirty compatibility with GDAL < 2.5
+    // To easy quick&dirty compatibility with GDAL < 3.0
     if( CPLTestBool(CPLGetConfigOption("OGR_CT_FORCE_TRADITIONAL_GIS_ORDER", "NO")) )
     {
         if( poSRSSource )
@@ -660,11 +693,23 @@ int OGRProjCT::Initialize( const OGRSpatialReference * poSourceIn,
         bSourceWrap = true;
         CPLDebug( "OGRCT", "Wrap source at %g.", dfSourceWrapLong );
     }
+    else if( bSourceLatLong && options.d->bHasSourceCenterLong)
+    {
+        dfSourceWrapLong = options.d->dfSourceCenterLong;
+        bSourceWrap = true;
+        CPLDebug( "OGRCT", "Wrap source at %g.", dfSourceWrapLong );
+    }
 
     pszCENTER_LONG = poSRSTarget ? poSRSTarget->GetExtension( "GEOGCS", "CENTER_LONG" ) : nullptr;
     if( pszCENTER_LONG != nullptr )
     {
         dfTargetWrapLong = CPLAtof(pszCENTER_LONG);
+        bTargetWrap = true;
+        CPLDebug( "OGRCT", "Wrap target at %g.", dfTargetWrapLong );
+    }
+    else if( bTargetLatLong && options.d->bHasTargetCenterLong)
+    {
+        dfTargetWrapLong = options.d->dfTargetCenterLong;
         bTargetWrap = true;
         CPLDebug( "OGRCT", "Wrap target at %g.", dfTargetWrapLong );
     }
@@ -765,7 +810,7 @@ int OGRProjCT::Initialize( const OGRSpatialReference * poSourceIn,
         if( !m_pj )
         {
             CPLError( CE_Failure, CPLE_NotSupported,
-                      "Cannot instanciate pipeline %s",
+                      "Cannot instantiate pipeline %s",
                       options.d->osCoordOperation.c_str() );
             return FALSE;
         }
@@ -915,13 +960,13 @@ bool OGRProjCT::ListCoordinateOperations(const char* pszSrcSRS,
 
     auto src = proj_create(ctx, pszSrcSRS);
     if( !src ) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Cannot instanciate source_crs");
+        CPLError(CE_Failure, CPLE_AppDefined, "Cannot instantiate source_crs");
         return false;
     }
 
     auto dst = proj_create(ctx, pszTargetSRS);
     if( !dst ) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Cannot instanciate target_crs");
+        CPLError(CE_Failure, CPLE_AppDefined, "Cannot instantiate target_crs");
         proj_destroy(src);
         return false;
     }
@@ -1264,29 +1309,6 @@ int OGRCoordinateTransformation::Transform(
 }
 
 /************************************************************************/
-/*                            OCTTransform()                            */
-/************************************************************************/
-
-/** Transform an array of points
- *
- * @param hTransform Transformation object
- * @param nCount Number of points
- * @param x Array of nCount x values.
- * @param y Array of nCount y values.
- * @param z Array of nCount z values.
- * @return TRUE or FALSE
- */
-int CPL_STDCALL OCTTransform( OGRCoordinateTransformationH hTransform,
-                              int nCount, double *x, double *y, double *z )
-
-{
-    VALIDATE_POINTER1( hTransform, "OCTTransform", FALSE );
-
-    return OGRCoordinateTransformation::FromHandle(hTransform)->
-        Transform( nCount, x, y, z );
-}
-
-/************************************************************************/
 /*                             Transform()                              */
 /************************************************************************/
 
@@ -1388,6 +1410,19 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
     {
         constexpr double REVERSE_SPHERE_RADIUS = 1.0 / 6378137.0;
 
+        if( poSRSSource )
+        {
+            OGRAxisOrientation orientation;
+            poSRSSource->GetAxis(nullptr, 0, &orientation);
+            if( orientation != OAO_East )
+            {
+                for( int i = 0; i < nCount; i++ )
+                {
+                    std::swap(x[i], y[i]);
+                }
+            }
+        }
+
         double y0 = y[0];
         for( int i = 0; i < nCount; i++ )
         {
@@ -1447,6 +1482,19 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
                         M_PI / 2.0 -
                         2.0 * atan(exp(-y[i] * REVERSE_SPHERE_RADIUS));
                     y[i] *= RAD_TO_DEG;
+                }
+            }
+        }
+
+        if( poSRSTarget )
+        {
+            OGRAxisOrientation orientation;
+            poSRSTarget->GetAxis(nullptr, 0, &orientation);
+            if( orientation != OAO_East )
+            {
+                for( int i = 0; i < nCount; i++ )
+                {
+                    std::swap(x[i], y[i]);
                 }
             }
         }
@@ -1705,7 +1753,7 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
 /* -------------------------------------------------------------------- */
 /*      Apply data axis to target CRS mapping.                          */
 /* -------------------------------------------------------------------- */
-    if( !bWebMercatorToWGS84LongLat && poSRSTarget )
+    if( poSRSTarget )
     {
         const auto& mapping = poSRSTarget->GetDataAxisToSRSAxisMapping();
         if( mapping.size() >= 2 && (mapping[0] != 1 || mapping[1] != 2) )
@@ -1752,6 +1800,30 @@ int OGRProjCT::Transform( int nCount, double *x, double *y, double *z,
 
     return TRUE;
 }
+//! @endcond
+
+/************************************************************************/
+/*                            OCTTransform()                            */
+/************************************************************************/
+
+/** Transform an array of points
+ *
+ * @param hTransform Transformation object
+ * @param nCount Number of points
+ * @param x Array of nCount x values.
+ * @param y Array of nCount y values.
+ * @param z Array of nCount z values.
+ * @return TRUE or FALSE
+ */
+int CPL_STDCALL OCTTransform( OGRCoordinateTransformationH hTransform,
+                              int nCount, double *x, double *y, double *z )
+
+{
+    VALIDATE_POINTER1( hTransform, "OCTTransform", FALSE );
+
+    return OGRCoordinateTransformation::FromHandle(hTransform)->
+        Transform( nCount, x, y, z );
+}
 
 /************************************************************************/
 /*                           OCTTransformEx()                           */
@@ -1791,7 +1863,7 @@ int CPL_STDCALL OCTTransformEx( OGRCoordinateTransformationH hTransform,
  * @param z Array of nCount z values. Might be NULL
  * @param t Array of nCount time values. Might be NULL
  * @param pabSuccess Output array of nCount value that will be set to TRUE/FALSE. Might be NULL.
- * @since GDAL 2.5
+ * @since GDAL 3.0
  * @return TRUE or FALSE
  */
 int OCTTransform4D( OGRCoordinateTransformationH hTransform,

@@ -1115,7 +1115,7 @@ const char * CPL_STDCALL OSRGetAttrValue( OGRSpatialReferenceH hSRS,
  * The returned value is only short lived and should not be used after other
  * calls to methods on this object.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 const char* OGRSpatialReference::GetName() const
@@ -1136,7 +1136,7 @@ const char* OGRSpatialReference::GetName() const
  * The returned value is only short lived and should not be used after other
  * calls to methods on this object.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 const char* OSRGetName( OGRSpatialReferenceH hSRS )
 
@@ -1337,7 +1337,7 @@ OGRErr OGRSpatialReference::exportToWkt( char ** ppszResult ) const
  * </ul>
  *
  * @return OGRERR_NONE if successful.
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 OGRErr OGRSpatialReference::exportToWkt( char ** ppszResult,
@@ -1475,7 +1475,7 @@ OGRErr CPL_STDCALL OSRExportToWkt( OGRSpatialReferenceH hSRS,
  * 
  * This function is the same as OGRSpatialReference::exportToWkt(char ** ppszResult,const char* const* papszOptions ) const
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 
 OGRErr OSRExportToWktEx( OGRSpatialReferenceH hSRS,
@@ -1535,6 +1535,10 @@ OGRErr OGRSpatialReference::importFromWkt( const char ** ppszInput )
         }
         for( auto iter = errors; iter && *iter; ++iter ) {
             d->m_wktImportErrors.push_back(*iter);
+            if( !d->m_pj_crs )
+            {
+                CPLError(CE_Failure, CPLE_AppDefined, "%s", *iter);
+            }
         }
         proj_string_list_destroy(warnings);
         proj_string_list_destroy(errors);
@@ -3984,7 +3988,7 @@ OGRErr OGRSpatialReference::importFromWMSAUTO( const char * pszDefinition )
 /************************************************************************/
 
 /**
- * \brief Get spheroid semi major axis (in metres starting with GDAL 2.5)
+ * \brief Get spheroid semi major axis (in metres starting with GDAL 3.0)
  *
  * This method does the same thing as the C function OSRGetSemiMajor().
  *
@@ -8868,7 +8872,7 @@ void OSRCleanup( void )
 /**
  * \brief Return the number of axis of the coordinate system of the CRS.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 int OGRSpatialReference::GetAxesCount() const
 {
@@ -8947,14 +8951,71 @@ OGRSpatialReference::GetAxis( const char *pszTargetKey, int iAxis,
     pszTargetKey = d->nullifyTargetKeyIfPossible(pszTargetKey);
     if( pszTargetKey == nullptr && iAxis <= 2 )
     {
+        auto ctxt = d->getPROJContext();
+
+        int iAxisModified = iAxis;
+
         d->demoteFromBoundCRS();
-        auto cs = proj_crs_get_coordinate_system(d->getPROJContext(), d->m_pj_crs);
+
+        PJ* cs = nullptr;
+        if( d->m_pjType == PJ_TYPE_COMPOUND_CRS )
+        {
+            auto horizCRS = proj_crs_get_sub_crs(ctxt, d->m_pj_crs, 0);
+            if( horizCRS )
+            {
+                if( proj_get_type(horizCRS) == PJ_TYPE_BOUND_CRS )
+                {
+                    auto baseCRS = proj_get_source_crs(ctxt, horizCRS);
+                    if( baseCRS )
+                    {
+                        proj_destroy(horizCRS);
+                        horizCRS = baseCRS;
+                    }
+                }
+                cs = proj_crs_get_coordinate_system(ctxt, horizCRS);
+                proj_destroy(horizCRS);
+                if( cs )
+                {
+                    if( iAxisModified >= proj_cs_get_axis_count(ctxt, cs) )
+                    {
+                        iAxisModified -= proj_cs_get_axis_count(ctxt, cs);
+                        proj_destroy(cs);
+                        cs = nullptr;
+                    }
+                }
+            }
+
+            if( cs == nullptr )
+            {
+                auto vertCRS = proj_crs_get_sub_crs(ctxt, d->m_pj_crs, 1);
+                if( vertCRS )
+                {
+                    if( proj_get_type(vertCRS) == PJ_TYPE_BOUND_CRS )
+                    {
+                        auto baseCRS = proj_get_source_crs(ctxt, vertCRS);
+                        if( baseCRS )
+                        {
+                            proj_destroy(vertCRS);
+                            vertCRS = baseCRS;
+                        }
+                    }
+
+                    cs = proj_crs_get_coordinate_system(ctxt, vertCRS);
+                    proj_destroy(vertCRS);
+                }
+            }
+        }
+        else
+        {
+            cs = proj_crs_get_coordinate_system(ctxt, d->m_pj_crs);
+        }
+
         if( cs )
         {
             const char* pszName = nullptr;
             const char* pszOrientation = nullptr;
             proj_cs_get_axis_info(
-                d->getPROJContext(), cs, iAxis, &pszName, nullptr, &pszOrientation,
+                ctxt, cs, iAxisModified, &pszName, nullptr, &pszOrientation,
                 nullptr, nullptr, nullptr, nullptr);
             if( pszName && pszOrientation )
             {
@@ -9587,7 +9648,7 @@ OGRErr CPL_STDCALL OSRExportToProj4( OGRSpatialReferenceH hSRS,
  * will be returned along with OGRERR_NONE.
  *
  * Special processing for Transverse Mercator:
- * Starting with GDAL 2.5, if the OSR_USE_APPROX_TMERC configuration option is
+ * Starting with GDAL 3.0, if the OSR_USE_APPROX_TMERC configuration option is
  * set to YES, the PROJ definition built from the SRS will use the +approx flag
  * for the tmerc and utm projection methods, rather than the more accurate method.
  *
@@ -9668,7 +9729,7 @@ OGRErr OGRSpatialReference::exportToProj4( char ** ppszProj4 ) const
  * renaming a variety of projections and arguments, and stripping out
  * nodes note recognised by ESRI (like AUTHORITY and AXIS).
  *
- * \note Since GDAL 2.5, this function has only user-visible effects at
+ * \note Since GDAL 3.0, this function has only user-visible effects at
  * exportToWkt() time. It is recommended to use instead exportToWkt(char**, const char* const char*) const
  * with options having FORMAT=WKT1_ESRI.
  *
@@ -9718,7 +9779,7 @@ OGRErr OSRMorphToESRI( OGRSpatialReferenceH hSRS )
  * datums to "standard" names, as defined by Adam Gawne-Cain's reference
  * translation of EPSG to WKT for the CT specification.
  *
- * \note Since GDAL 2.5, this function is essentially a no-operation, since
+ * \note Since GDAL 3.0, this function is essentially a no-operation, since
  * morphing from ESRI is automatically done by importFromWkt(). Its only
  * effect is to undo the effect of a potential prior call to morphToESRI().
  *
@@ -10015,7 +10076,7 @@ OGRErr CPL_STDCALL OSRImportFromEPSG( OGRSpatialReferenceH hSRS, int nCode )
  * Currently this returns TRUE for all geographic coordinate systems
  * with an EPSG code set, and axes set defining it as lat, long.
  *
- * \note Important change of behaviour since GDAL 2.5. In previous versions,
+ * \note Important change of behaviour since GDAL 3.0. In previous versions,
  * geographic CRS imported with importFromEPSG() would cause this method to
  * return FALSE on them, whereas now it returns TRUE, since importFromEPSG()
  * is now equivalent to importFromEPSGA().
@@ -10096,7 +10157,7 @@ int OSREPSGTreatsAsLatLong( OGRSpatialReferenceH hSRS )
  * Currently this returns TRUE for all projected coordinate systems
  * with an EPSG code set, and axes set defining it as northing, easting.
  * 
- * \note Important change of behaviour since GDAL 2.5. In previous versions,
+ * \note Important change of behaviour since GDAL 3.0. In previous versions,
  * projected CRS with northing, easting axis order imported with
  * importFromEPSG() would cause this method to
  * return FALSE on them, whereas now it returns TRUE, since importFromEPSG()
@@ -10362,7 +10423,7 @@ OGRErr OGRSpatialReference::ImportFromESRIWisconsinWKT(
  *     SetDataAxisToSRSAxisMapping()
  * </ul>
  * @return the the data axis to CRS axis mapping strategy.
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OSRAxisMappingStrategy OGRSpatialReference::GetAxisMappingStrategy() const
 {
@@ -10376,7 +10437,7 @@ OSRAxisMappingStrategy OGRSpatialReference::GetAxisMappingStrategy() const
 /** \brief Retun the data axis to CRS axis mapping strategy.
  * 
  * See OGRSpatialReference::GetAxisMappingStrategy()
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OSRAxisMappingStrategy OSRGetAxisMappingStrategy( OGRSpatialReferenceH hSRS )
 {
@@ -10392,7 +10453,7 @@ OSRAxisMappingStrategy OSRGetAxisMappingStrategy( OGRSpatialReferenceH hSRS )
 /** \brief Set the data axis to CRS axis mapping strategy.
  * 
  * See OGRSpatialReference::GetAxisMappingStrategy()
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 void OGRSpatialReference::SetAxisMappingStrategy(OSRAxisMappingStrategy strategy)
 {
@@ -10407,7 +10468,7 @@ void OGRSpatialReference::SetAxisMappingStrategy(OSRAxisMappingStrategy strategy
 /** \brief Set the data axis to CRS axis mapping strategy.
  * 
  * See OGRSpatialReference::SetAxisMappingStrategy()
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 void OSRSetAxisMappingStrategy( OGRSpatialReferenceH hSRS,
                                 OSRAxisMappingStrategy strategy )
@@ -10429,7 +10490,7 @@ void OSRSetAxisMappingStrategy( OGRSpatialReferenceH hSRS,
  * If m = GetDataAxisToSRSAxisMapping(), then m[0] is the data axis number
  * for the first axis of the CRS.
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 const std::vector<int>& OGRSpatialReference::GetDataAxisToSRSAxisMapping() const
 {
@@ -10444,7 +10505,7 @@ const std::vector<int>& OGRSpatialReference::GetDataAxisToSRSAxisMapping() const
  * 
  * See OGRSpatialReference::GetDataAxisToSRSAxisMapping()
  * 
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 const int *OSRGetDataAxisToSRSAxisMapping( OGRSpatialReferenceH hSRS, int* pnCount )
 {
@@ -10466,7 +10527,7 @@ const int *OSRGetDataAxisToSRSAxisMapping( OGRSpatialReferenceH hSRS, int* pnCou
  * Automatically implies SetAxisMappingStrategy(OAMS_CUSTOM)
  * 
  * See OGRSpatialReference::GetAxisMappingStrategy()
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OGRErr OGRSpatialReference::SetDataAxisToSRSAxisMapping(const std::vector<int>& mapping)
 {
@@ -10501,7 +10562,7 @@ OGRErr OGRSpatialReference::SetDataAxisToSRSAxisMapping(const std::vector<int>& 
  * use. Might be NULL. Note that *ppszAreaName is short-lived and might be invalidated
  * by further calls.
  * @return true in case of success
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 bool OGRSpatialReference::GetAreaOfUse( double* pdfWestLongitudeDeg,
                                         double* pdfSouthLatitudeDeg,
@@ -10539,7 +10600,7 @@ bool OGRSpatialReference::GetAreaOfUse( double* pdfWestLongitudeDeg,
  *
  * This function is the same as the OGRSpatialReference::GetAreaOfUse() method.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 int OSRGetAreaOfUse( OGRSpatialReferenceH hSRS,
                      double* pdfWestLongitudeDeg,
@@ -10573,7 +10634,7 @@ int OSRGetAreaOfUse( OGRSpatialReferenceH hSRS,
  * @return an array of OSRCRSInfo* pointers to be freed with
  * OSRDestroyCRSInfoList(), or NULL in case of error.
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 OSRCRSInfo **OSRGetCRSInfoListFromDatabase(
                                       const char *pszAuthName,
@@ -10643,7 +10704,7 @@ OSRCRSInfo **OSRGetCRSInfoListFromDatabase(
 /** \brief Destroy the result returned by
  * OSRGetCRSInfoListFromDatabase().
  *
- * @since GDAL 2.5
+ * @since GDAL 3.0
  */
 void OSRDestroyCRSInfoList(OSRCRSInfo** list)
 {

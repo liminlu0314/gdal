@@ -7,7 +7,7 @@
 # Howard Butler hobu.inc@gmail.com
 
 
-gdal_version = '2.4.0'
+gdal_version = '3.0.0'
 
 import sys
 import os
@@ -240,6 +240,7 @@ class gdal_ext(build_ext):
         self.gdaldir = None
         self.gdal_config = self.GDAL_CONFIG
         self.extra_cflags = []
+        self.parallel = True # Python 3.5 only
 
     def get_compiler(self):
         return self.compiler or get_default_compiler()
@@ -323,6 +324,23 @@ class gdal_ext(build_ext):
         ext.extra_compile_args.extend(self.extra_cflags)
         return build_ext.build_extension(self, ext)
 
+# This is only needed with Python 2.
+if sys.version_info < (3,):
+    try:
+        import multiprocessing
+        from concurrent.futures import ThreadPoolExecutor as Pool
+
+        num_jobs = multiprocessing.cpu_count()
+
+        def parallel_build_extensions(self):
+            self.check_extensions_list(self.extensions)
+
+            with Pool(num_jobs) as pool:
+                pool.map(self.build_extension, self.extensions)
+
+        build_ext.build_extensions = parallel_build_extensions
+    except:
+        pass
 
 extra_link_args = []
 extra_compile_args = []
@@ -383,7 +401,7 @@ if HAVE_NUMPY:
 
 packages = ["osgeo", ]
 
-readme = str(open('README.txt', 'rb').read())
+readme = str(open('README.rst', 'rb').read())
 
 name = 'GDAL'
 version = gdal_version
@@ -427,6 +445,7 @@ setup_kwargs = dict(
     maintainer=maintainer,
     maintainer_email=maintainer_email,
     long_description=readme,
+    long_description_content_type='text/x-rst',
     description=description,
     license=license_type,
     classifiers=classifiers,
