@@ -1129,11 +1129,11 @@ CPLErr VRTDataset::AddBand( GDALDataType eType, char **papszOptions )
  * @see VRTDataset::VRTAddBand().
  */
 
-int CPL_STDCALL VRTAddBand( VRTDatasetH hDataset, GDALDataType eType,
+CPLErr CPL_STDCALL VRTAddBand( VRTDatasetH hDataset, GDALDataType eType,
                             char **papszOptions )
 
 {
-    VALIDATE_POINTER1( hDataset, "VRTAddBand", 0 );
+    VALIDATE_POINTER1( hDataset, "VRTAddBand", CE_Failure);
 
     return reinterpret_cast<VRTDataset *>(
         hDataset )->AddBand( eType, papszOptions );
