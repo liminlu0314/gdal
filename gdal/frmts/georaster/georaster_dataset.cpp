@@ -7,7 +7,7 @@
  *
  ******************************************************************************
  * Copyright (c) 2008, Ivan Lucena <ivan dot lucena at oracle dot com>
- * Copyright (c) 2013, Even Rouault <even dot rouault at mines-paris dot org>
+ * Copyright (c) 2013, Even Rouault <even dot rouault at spatialys.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files ( the "Software" ),
@@ -72,7 +72,7 @@ GeoRasterDataset::GeoRasterDataset()
 
 GeoRasterDataset::~GeoRasterDataset()
 {
-    FlushCache();
+    GeoRasterDataset::FlushCache();
 
     poGeoRaster->FlushMetadata();
 

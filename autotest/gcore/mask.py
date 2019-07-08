@@ -8,7 +8,7 @@
 #
 ###############################################################################
 # Copyright (c) 2007, Frank Warmerdam <warmerdam@pobox.com>
-# Copyright (c) 2008-2012, Even Rouault <even dot rouault at mines-paris dot org>
+# Copyright (c) 2008-2012, Even Rouault <even dot rouault at spatialys.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -407,8 +407,7 @@ def test_mask_13():
 
     drv.Delete('tmp/byte_with_mask.tif')
 
-    with pytest.raises(OSError, message='tmp/byte_with_mask.tif.msk is still there'):
-        os.stat('tmp/byte_with_mask.tif.msk')
+    assert not os.path.exists('tmp/byte_with_mask.tif.msk')
 
 ###############################################################################
 # Test creation of internal TIFF mask band
@@ -457,9 +456,8 @@ def test_mask_14():
 
     ds = None
 
-    with pytest.raises(OSError, message='tmp/byte_with_mask.tif.msk should not exist'):
-        os.stat('tmp/byte_with_mask.tif.msk')
-    
+    assert not os.path.exists('tmp/byte_with_mask.tif.msk')
+
     with gdaltest.config_option('GDAL_TIFF_INTERNAL_MASK_TO_8BIT', 'FALSE'):
       ds = gdal.Open('tmp/byte_with_mask.tif')
 
@@ -534,9 +532,7 @@ def mask_and_ovr(order, method):
 
     ds = None
 
-    with pytest.raises(OSError, message='tmp/byte_with_mask.tif.msk should not exist'):
-        os.stat('tmp/byte_with_ovr_and_mask.tif.msk')
-    
+    assert not os.path.exists('tmp/byte_with_ovr_and_mask.tif.msk')
 
     with gdaltest.config_option('GDAL_TIFF_INTERNAL_MASK_TO_8BIT', 'FALSE'):
         ds = gdal.Open('tmp/byte_with_ovr_and_mask.tif')
@@ -712,9 +708,7 @@ def test_mask_22():
 
     drv.Delete('tmp/mask_22.tif')
 
-    with pytest.raises(OSError, message='tmp/mask_22.tif.msk is still there'):
-        os.stat('tmp/mask_22.tif.msk')
-    
+    assert not os.path.exists('tmp/mask_22.tif.msk')
 
     
 ###############################################################################

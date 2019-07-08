@@ -6,7 +6,7 @@
  *
  ******************************************************************************
  * Copyright (c) 1998, Frank Warmerdam
- * Copyright (c) 2007-2014, Even Rouault <even dot rouault at mines-paris dot org>
+ * Copyright (c) 2007-2014, Even Rouault <even dot rouault at spatialys.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -3141,7 +3141,7 @@ CPLConfigOptionSetter::CPLConfigOptionSetter(
     m_bRestoreOldValue(false)
 {
     const char* pszOldValue = CPLGetThreadLocalConfigOption(pszKey, nullptr);
-    if( (bSetOnlyIfUndefined && pszOldValue == nullptr) || !bSetOnlyIfUndefined )
+    if( (bSetOnlyIfUndefined && CPLGetConfigOption(pszKey, nullptr) == nullptr) || !bSetOnlyIfUndefined )
     {
         m_bRestoreOldValue = true;
         if( pszOldValue )

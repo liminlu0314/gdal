@@ -2,10 +2,10 @@
  *
  * Project:  CPL - Common Portability Library
  * Purpose:  Implement VSI large file api for gz/zip files (.gz and .zip).
- * Author:   Even Rouault, even.rouault at mines-paris.org
+ * Author:   Even Rouault, even.rouault at spatialys.com
  *
  ******************************************************************************
- * Copyright (c) 2008-2014, Even Rouault <even dot rouault at mines-paris dot org>
+ * Copyright (c) 2008-2014, Even Rouault <even dot rouault at spatialys.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -1295,7 +1295,7 @@ VSIGZipWriteHandleMT::VSIGZipWriteHandleMT(  VSIVirtualHandle* poBaseHandle,
 VSIGZipWriteHandleMT::~VSIGZipWriteHandleMT()
 
 {
-    Close();
+    VSIGZipWriteHandleMT::Close();
     for( auto& psJob: apoFinishedJobs_ )
     {
         delete psJob->pBuffer_;
@@ -1893,7 +1893,7 @@ VSIGZipWriteHandle::~VSIGZipWriteHandle()
 
 {
     if( bCompressActive )
-        Close();
+        VSIGZipWriteHandle::Close();
 
     CPLFree( pabyInBuf );
     CPLFree( pabyOutBuf );
@@ -2722,6 +2722,7 @@ std::vector<CPLString> VSIZipFilesystemHandler::GetExtensions()
     oList.push_back(".dwf");
     oList.push_back(".ods");
     oList.push_back(".xlsx");
+    oList.push_back(".xlsm");
 
     // Add to zip FS handler extensions array additional extensions
     // listed in CPL_VSIL_ZIP_ALLOWED_EXTENSIONS config option.
@@ -3120,7 +3121,7 @@ VSIZipWriteHandle::VSIZipWriteHandle( VSIZipFilesystemHandler* poFS,
 
 VSIZipWriteHandle::~VSIZipWriteHandle()
 {
-    Close();
+    VSIZipWriteHandle::Close();
 }
 
 /************************************************************************/

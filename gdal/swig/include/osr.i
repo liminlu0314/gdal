@@ -480,6 +480,11 @@ public:
     return OSRGetAxis( self, target_key, iAxis, NULL );
   }
 
+  /* Added in GDAL 3.1 */
+  int GetAxesCount() {
+    return OSRGetAxesCount(self);
+  }
+
   /* Added in GDAL 2.1 */
   OGRAxisOrientation GetAxisOrientation( const char *target_key, int iAxis ) {
     OGRAxisOrientation orientation = OAO_Other;
@@ -1373,6 +1378,38 @@ void GetCRSInfoListFromDatabase( const char *authName,
 
 #endif // SWIGPYTHON
 
+%inline %{
+void SetPROJSearchPath( const char *utf8_path )
+{
+    const char* const apszPaths[2] = { utf8_path, NULL };
+    OSRSetPROJSearchPaths(apszPaths);
+}
+%}
+
+%apply (char **options) { (char **) };
+%inline %{
+void SetPROJSearchPaths( char** paths )
+{
+    OSRSetPROJSearchPaths(paths);
+}
+%}
+%clear (char **);
+
+%inline %{
+int GetPROJVersionMajor()
+{
+    int num;
+    OSRGetPROJVersion(&num, NULL, NULL);
+    return num;
+}
+
+int GetPROJVersionMinor()
+{
+    int num;
+    OSRGetPROJVersion(NULL, &num, NULL);
+    return num;
+}
+%}
 
 #ifdef SWIGPYTHON
 %thread;

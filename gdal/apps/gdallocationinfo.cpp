@@ -6,7 +6,7 @@
  *
  ******************************************************************************
  * Copyright (c) 2010, Frank Warmerdam <warmerdam@pobox.com>
- * Copyright (c) 2010-2013, Even Rouault <even dot rouault at mines-paris dot org>
+ * Copyright (c) 2010-2013, Even Rouault <even dot rouault at spatialys.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,6 +34,12 @@
 #include "commonutils.h"
 #include "ogr_spatialref.h"
 #include <vector>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 CPL_CVSID("$Id$")
 
@@ -179,7 +185,8 @@ MAIN_START(argc, argv)
 /*      Open source file.                                               */
 /* -------------------------------------------------------------------- */
     GDALDatasetH hSrcDS
-        = GDALOpenEx( pszSrcFilename, GDAL_OF_RASTER, nullptr,
+        = GDALOpenEx( pszSrcFilename, GDAL_OF_RASTER | GDAL_OF_VERBOSE_ERROR,
+                      nullptr,
                       papszOpenOptions, nullptr );
     if( hSrcDS == nullptr )
         exit( 1 );
@@ -222,6 +229,19 @@ MAIN_START(argc, argv)
 
     if( pszLocX == nullptr && pszLocY == nullptr )
     {
+        // Is it an interactive terminal ?
+        if( isatty(static_cast<int>(fileno(stdin))) )
+        {
+            if( pszSourceSRS != nullptr )
+            {
+                fprintf(stderr, "Enter X Y values separated by space, and press Return.\n");
+            }
+            else
+            {
+                fprintf(stderr, "Enter pixel line values separated by space, and press Return.\n");
+            }
+        }
+
         if (fscanf(stdin, "%lf %lf", &dfGeoX, &dfGeoY) != 2)
         {
             inputAvailable = 0;

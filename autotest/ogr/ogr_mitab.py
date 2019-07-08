@@ -9,7 +9,7 @@
 #
 ###############################################################################
 # Copyright (c) 2004, Frank Warmerdam <warmerdam@pobox.com>
-# Copyright (c) 2012-2014, Even Rouault <even dot rouault at mines-paris dot org>
+# Copyright (c) 2012-2014, Even Rouault <even dot rouault at spatialys.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -2350,6 +2350,35 @@ def test_ogr_mitab_delete_feature_no_geometry():
     lyr = ds.GetLayer(0)
     f = lyr.GetNextFeature()
     assert f['id'] == 2
+    ds = None
+
+    ogr.GetDriverByName('MapInfo File').DeleteDataSource(filename)
+
+
+###############################################################################
+# Check fix for https://github.com/OSGeo/gdal/issues/1636
+
+def test_ogr_mitab_too_large_value_for_decimal_field():
+
+    filename = '/vsimem/test.tab'
+    ds = ogr.GetDriverByName('MapInfo File').CreateDataSource(filename)
+    lyr = ds.CreateLayer('test', geom_type = ogr.wkbNone)
+    fld = ogr.FieldDefn('f', ogr.OFTReal)
+    fld.SetWidth(20)
+    fld.SetPrecision(12)
+    lyr.CreateField(fld)
+
+    f = ogr.Feature(lyr.GetLayerDefn())
+    f['f'] = 1234567.012
+    assert lyr.CreateFeature(f) == ogr.OGRERR_NONE
+    f = None
+
+    f = ogr.Feature(lyr.GetLayerDefn())
+    f['f'] = 123456789.012
+    with gdaltest.error_handler():
+        assert lyr.CreateFeature(f) != ogr.OGRERR_NONE
+    f = None
+
     ds = None
 
     ogr.GetDriverByName('MapInfo File').DeleteDataSource(filename)
