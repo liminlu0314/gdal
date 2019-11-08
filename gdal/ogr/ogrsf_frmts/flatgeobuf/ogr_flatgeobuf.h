@@ -40,12 +40,14 @@ using namespace FlatGeobuf;
 
 class OGRFlatGeobufDataset;
 
-static constexpr const uint8_t magicbytes[8] = { 0x66, 0x67, 0x62, 0x00, 0x66, 0x67, 0x62, 0x00 };
+static constexpr uint8_t magicbytes[8] = { 0x66, 0x67, 0x62, 0x00, 0x66, 0x67, 0x62, 0x00 };
+
+static constexpr uint32_t header_max_buffer_size = 1048576;
+static constexpr uint32_t feature_max_buffer_size = 2147483648 - 1;
 
 struct FeatureItem : Item {
-    flatbuffers::DetachedBuffer buf;
-    uint8_t *data;
     uint32_t size;
+    uint64_t offset;
 };
 
 struct GeometryContext {
@@ -73,6 +75,7 @@ class OGRFlatGeobufLayer final : public OGRLayer
         bool m_hasT = false;
         bool m_hasTM = false;
         uint64_t m_featuresCount = 0;
+        OGREnvelope m_sExtent;
 
         OGRFeatureDefn *m_poFeatureDefn = nullptr;
         OGRSpatialReference *m_poSRS = nullptr;
@@ -81,8 +84,8 @@ class OGRFlatGeobufLayer final : public OGRLayer
         uint64_t m_featuresPos = 0;
         uint64_t m_featuresSize = 0;
         uint64_t m_offset = 0;
-        uint64_t m_offsetInit = 0;
-        uint64_t *m_featureOffsets = nullptr;
+        uint64_t m_offsetFeatures = 0;
+        uint64_t m_offsetIndices = 0;
         std::vector<uint64_t> m_foundFeatureIndices;
         bool m_queriedSpatialIndex = false;
         bool m_ignoreSpatialFilter = false;
@@ -94,29 +97,37 @@ class OGRFlatGeobufLayer final : public OGRLayer
         GByte *m_featureBuf = nullptr;
         uint32_t m_featureSize = 0;
         uint32_t m_featureBufSize = 0;
-        bool bCreateSpatialIndexAtClose = true;
-        bool bVerifyBuffers = true;
-        bool bCanCreate = true;
+        bool m_bCreateSpatialIndexAtClose = true;
+        bool m_bVerifyBuffers = true;
+        bool m_bCanCreate = true;
+        VSILFILE *m_poFpWrite = nullptr;
+        uint64_t m_writeOffset = 0;
+        uint16_t m_indexNodeSize = 0;
+        std::string m_oTempFile;
 
         // deserialize
         void ensurePadfBuffers(size_t count);
+        OGRErr ensureFeatureBuf();
         OGRErr parseFeature(OGRFeature *poFeature, OGRGeometry **ogrGeometry);
-        OGRPoint *readPoint(const Feature *feature, uint32_t offset = 0);
-        OGRMultiPoint *readMultiPoint(const Feature *feature, uint32_t len);
-        OGRLineString *readLineString(const Feature *feature, uint32_t len, uint32_t offset = 0);
-        OGRMultiLineString *readMultiLineString(const Feature *feature);
-        OGRLinearRing *readLinearRing(const Feature *feature, uint32_t len, uint32_t offset = 0);
-        OGRPolygon *readPolygon(const Feature *feature, uint32_t len, uint32_t offset = 0);
-        OGRMultiPolygon *readMultiPolygon(const Feature *feature, uint32_t len);
+        OGRPoint *readPoint(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t offset = 0);
+        OGRMultiPoint *readMultiPoint(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len);
+        OGRErr readSimpleCurve(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len, uint32_t offset, OGRSimpleCurve *c);
+        OGRLineString *readLineString(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len, uint32_t offset = 0);
+        OGRMultiLineString *readMultiLineString(const Feature *feature, const flatbuffers::Vector<double> &pXy);
+        OGRLinearRing *readLinearRing(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len, uint32_t offset = 0);
+        OGRPolygon *readPolygon(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len, uint32_t offset = 0);
+        OGRMultiPolygon *readMultiPolygon(const Feature *feature, const flatbuffers::Vector<double> &pXy, uint32_t len);
         OGRGeometry *readGeometry(const Feature *feature);
         ColumnType toColumnType(OGRFieldType fieldType, OGRFieldSubType subType);
         static OGRFieldType toOGRFieldType(ColumnType type);
         const std::vector<flatbuffers::Offset<Column>> writeColumns(flatbuffers::FlatBufferBuilder &fbb);
         void readColumns();
-        OGRErr querySpatialIndex();
+        OGRErr readIndex();
+        OGRErr readFeatureOffset(uint64_t index, uint64_t &featureOffset);
 
         // serialize
         void Create();
+        void WriteHeader(VSILFILE *poFp, uint64_t featuresCount, std::vector<double> *extentVector);
         void writePoint(OGRPoint *p, GeometryContext &gc);
         void writeMultiPoint(OGRMultiPoint *mp, GeometryContext &gc);
         uint32_t writeLineString(OGRLineString *ls, GeometryContext &gc);
@@ -127,8 +138,8 @@ class OGRFlatGeobufLayer final : public OGRLayer
         bool translateOGRwkbGeometryType();
         OGRwkbGeometryType getOGRwkbGeometryType();
     public:
-        OGRFlatGeobufLayer(const Header *, GByte *headerBuf, const char *pszFilename, uint64_t offset);
-        OGRFlatGeobufLayer(const char *pszLayerName, const char *pszFilename, OGRSpatialReference *poSpatialRef, OGRwkbGeometryType eGType);
+        OGRFlatGeobufLayer(const Header *, GByte *headerBuf, const char *pszFilename, VSILFILE *poFp, uint64_t offset, uint64_t offsetIndices);
+        OGRFlatGeobufLayer(const char *pszLayerName, const char *pszFilename, OGRSpatialReference *poSpatialRef, OGRwkbGeometryType eGType, VSILFILE *poFpWrite, std::string oTempFile, bool bCreateSpatialIndexAtClose);
         virtual ~OGRFlatGeobufLayer();
 
         virtual OGRFeature *GetFeature(GIntBig nFeatureId) override;
@@ -140,20 +151,27 @@ class OGRFlatGeobufLayer final : public OGRLayer
         virtual void ResetReading() override;
         virtual OGRFeatureDefn *GetLayerDefn() override { return m_poFeatureDefn; }
         virtual GIntBig GetFeatureCount(int bForce) override;
+        virtual OGRErr GetExtent(OGREnvelope* psExtent, int bForce) override;
+        virtual OGRErr      GetExtent( int iGeomField, OGREnvelope *psExtent,
+                                       int bForce ) override
+                { return OGRLayer::GetExtent(iGeomField, psExtent, bForce); }
 
-        void CreateSpatialIndexAtClose( int bFlag ) { bCreateSpatialIndexAtClose = CPL_TO_BOOL(bFlag); }
-        void VerifyBuffers( int bFlag ) { bVerifyBuffers = CPL_TO_BOOL(bFlag); }
+        void VerifyBuffers( int bFlag ) { m_bVerifyBuffers = CPL_TO_BOOL(bFlag); }
+
+        const std::string& GetFilename() const { return m_osFilename; }
 };
 
 class OGRFlatGeobufDataset final: public GDALDataset
 {
     private:
-        std::string m_osName;
-        std::vector<std::unique_ptr<OGRLayer>> m_apoLayers;
-        bool m_create = false;
+        std::vector<std::unique_ptr<OGRFlatGeobufLayer>> m_apoLayers;
+        bool m_bCreate = false;
+        bool m_bIsDir = false;
+
+        bool OpenFile(const char* pszFilename, VSILFILE* fp, bool bVerifyBuffers);
+
     public:
-        explicit OGRFlatGeobufDataset();
-        explicit OGRFlatGeobufDataset(const char *pszName);
+        explicit OGRFlatGeobufDataset(const char *pszName, bool bIsDir, bool bCreate);
         ~OGRFlatGeobufDataset();
 
         static GDALDataset *Open(GDALOpenInfo*);
@@ -171,6 +189,7 @@ class OGRFlatGeobufDataset final: public GDALDataset
                                      char **papszOptions = nullptr ) override;
 
         virtual int GetLayerCount() override { return static_cast<int>(m_apoLayers.size()); }
+        char** GetFileList() override;
 };
 
 #endif /* ndef OGR_FLATGEOBUF_H_INCLUDED */

@@ -139,6 +139,9 @@ Configuration options
 -  *GDAL_PDF_LAYERS_OFF* = list of layers (comma separated) to turn OFF.
    The layer names can be obtained by querying the LAYERS metadata
    domain (Poppler and PDFium).
+-  "GDAL_PDF_LAUNDER_LAYER_NAMES* = YES/NO: (GDAL >= 3.1) Can be set to NO
+   to avoid the layer names reported in the LAYERS metadata domain or as OGR
+   layers for the vector part to be "laundered".
 
 Open Options
 ~~~~~~~~~~~~
@@ -593,15 +596,27 @@ libpodofo 0.8.4, 0.9.1 and 0.9.3. Important note: using PoDoFo 0.9.0 is
 strongly discouraged, as it could cause crashes in GDAL due to a bug in
 PoDoFo.
 
-PDFium (GDAL > 2.1.0)
-~~~~~~~~~~~~~~~~~~~~~
+PDFium
+~~~~~~
 
 Using PDFium as a backend allows access to raster, vector,
 georeferencing and other metadata. The PDFium backend has also support
 for arbitrary overviews, for fast zoom-out.
 
 Only GDAL builds against static builds of PDFium have been tested.
-Building PDFium can be challenging. A `PDFium forked version for simpler
+Building PDFium can be challenging, and particular builds must be used to
+work properly with GDAL.
+
+With GDAL >= 3.1.0
++++++++++++++++++++
+
+The scripts in the <https://github.com/rouault/pdfium_build_gdal_3_1>`__
+repository must be used to build a patched version of PDFium.
+
+With GDAL >= 2.2.0 and < 3.1
+++++++++++++++++++++++++++++
+
+A `PDFium forked version for simpler
 builds <https://github.com/rouault/pdfium>`__ is available (for Windows,
 a dedicated
 `win_gdal_build <https://github.com/rouault/pdfium/tree/win_gdal_build>`__

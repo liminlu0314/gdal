@@ -64,7 +64,7 @@
 #include "ograpispy.h"
 #include "ogrsf_frmts.h"
 #include "ogrunionlayer.h"
-#include "swq.h"
+#include "ogr_swq.h"
 
 #include "../frmts/derived/derivedlist.h"
 
@@ -3086,9 +3086,9 @@ static void FreeAntiRecursion( void* pData )
 static AntiRecursionStruct& GetAntiRecursion()
 {
     static AntiRecursionStruct dummy;
-    int bMemoryErrorOccured = false;
-    void* pData = CPLGetTLSEx(CTLS_GDALOPEN_ANTIRECURSION, &bMemoryErrorOccured);
-    if( bMemoryErrorOccured )
+    int bMemoryErrorOccurred = false;
+    void* pData = CPLGetTLSEx(CTLS_GDALOPEN_ANTIRECURSION, &bMemoryErrorOccurred);
+    if( bMemoryErrorOccurred )
     {
         return dummy;
     }
@@ -3097,8 +3097,8 @@ static AntiRecursionStruct& GetAntiRecursion()
         auto pAntiRecursion = new AntiRecursionStruct();
         CPLSetTLSWithFreeFuncEx( CTLS_GDALOPEN_ANTIRECURSION,
                                  pAntiRecursion,
-                                 FreeAntiRecursion, &bMemoryErrorOccured );
-        if( bMemoryErrorOccured )
+                                 FreeAntiRecursion, &bMemoryErrorOccurred );
+        if( bMemoryErrorOccurred )
         {
             delete pAntiRecursion;
             return dummy;
@@ -3299,7 +3299,8 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
 
     oOpenInfo.papszOpenOptions = papszOpenOptionsCleaned;
 
-    for( int iDriver = -1; iDriver < poDM->GetDriverCount(); ++iDriver )
+    const int nDriverCount = poDM->GetDriverCount();
+    for( int iDriver = -1; iDriver < nDriverCount; ++iDriver )
     {
         GDALDriver *poDriver = nullptr;
 
@@ -3499,7 +3500,12 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
         // If not, return a more generic error.
         if(!VSIToCPLError(CE_Failure, CPLE_OpenFailed))
         {
-            if( oOpenInfo.bStatOK )
+            if( nDriverCount == 0 )
+            {
+                CPLError(CE_Failure, CPLE_OpenFailed,
+                         "No driver registered.");
+            }
+            else if( oOpenInfo.bStatOK )
             {
                 CPLError(CE_Failure, CPLE_OpenFailed,
                          "`%s' not recognized as a supported file format.",
@@ -7998,3 +8004,24 @@ std::shared_ptr<GDALGroup> GDALDataset::GetRootGroup() const
 {
     return nullptr;
 }
+
+
+/************************************************************************/
+/*                        GetRawBinaryLayout()                          */
+/************************************************************************/
+
+/**
+ \brief Return the layout of a dataset that can be considered as a raw binary format.
+
+ @param sLayout Structure that will be set if the dataset is a raw binary one.
+ @return true if the dataset is a raw binary one.
+ @since GDAL 3.1
+*/
+
+//! @cond Doxygen_Suppress
+bool GDALDataset::GetRawBinaryLayout(RawBinaryLayout& sLayout)
+{
+    CPL_IGNORE_RET_VAL(sLayout);
+    return false;
+}
+//! @endcond

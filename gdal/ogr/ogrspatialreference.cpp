@@ -92,6 +92,7 @@ struct OGRSpatialReference::Private
     CPLString           m_osAreaName{};
 
     bool                m_bNodesChanged = false;
+    bool                m_bNodesWKT2 = false;
     OGR_SRSNode        *m_poRoot = nullptr;
 
     double              dfFromGreenwich = 0.0;
@@ -274,9 +275,22 @@ void OGRSpatialReference::Private::refreshRootFromProjObj()
         }
         aosOptions.SetNameValue("STRICT", "NO");
 
-        const char* pszWKT = proj_as_wkt(getPROJContext(),
-            m_pj_crs, m_bMorphToESRI ? PJ_WKT1_ESRI : PJ_WKT1_GDAL,
-            aosOptions.List());
+        const char* pszWKT;
+        {
+            CPLErrorStateBackuper oErrorStateBackuper;
+            CPLErrorHandlerPusher oErrorHandler(CPLQuietErrorHandler);
+            pszWKT = proj_as_wkt(getPROJContext(),
+                m_pj_crs, m_bMorphToESRI ? PJ_WKT1_ESRI : PJ_WKT1_GDAL,
+                aosOptions.List());
+            m_bNodesWKT2 = false;
+        }
+        if( !m_bMorphToESRI && pszWKT == nullptr )
+        {
+             pszWKT = proj_as_wkt(getPROJContext(), m_pj_crs, PJ_WKT2_2018,
+                                  aosOptions.List());
+             m_bNodesWKT2 = true;
+        }
+        CPLPopErrorHandler();
         if( pszWKT )
         {
             auto root = new OGR_SRSNode();
@@ -1077,7 +1091,13 @@ const char *OGRSpatialReference::GetAttrValue( const char * pszNodeName,
 {
     const OGR_SRSNode *poNode = GetAttrNode( pszNodeName );
     if( poNode == nullptr )
+    {
+        if( d->m_bNodesWKT2 && EQUAL(pszNodeName, "PROJECTION") )
+        {
+            return GetAttrValue("METHOD", iAttr);
+        }
         return nullptr;
+    }
 
     if( iAttr < 0 || iAttr >= poNode->GetChildCount() )
         return nullptr;
@@ -1600,28 +1620,53 @@ OGRErr OGRSpatialReference::importFromWkt( const char ** ppszInput )
 {
     if( !ppszInput || !*ppszInput )
         return OGRERR_FAILURE;
+    if( strlen(*ppszInput) > 100 * 1000 &&
+        CPLTestBool(CPLGetConfigOption("OSR_IMPORT_FROM_WKT_LIMIT", "YES")) )
+    {
+        CPLError(CE_Failure, CPLE_NotSupported,
+                 "Suspiciously large input for importFromWkt(). Rejecting it. "
+                 "You can remove this limitation by definition the "
+                 "OSR_IMPORT_FROM_WKT_LIMIT configuration option to NO.");
+        return OGRERR_FAILURE;
+    }
 
     Clear();
 
+    bool canCache = false;
+    auto tlsCache = OSRGetProjTLSCache();
+    std::string osWkt;
     if( **ppszInput )
     {
-        const char* const options[] = { "STRICT=NO", nullptr };
-        PROJ_STRING_LIST warnings = nullptr;
-        PROJ_STRING_LIST errors = nullptr;
-        d->setPjCRS(proj_create_from_wkt(
-            d->getPROJContext(), *ppszInput, options, &warnings, &errors));
-        for( auto iter = warnings; iter && *iter; ++iter ) {
-            d->m_wktImportWarnings.push_back(*iter);
+        osWkt = *ppszInput;
+        auto cachedObj = tlsCache->GetPJForWKT(osWkt);
+        if( cachedObj )
+        {
+            d->setPjCRS(cachedObj);
         }
-        for( auto iter = errors; iter && *iter; ++iter ) {
-            d->m_wktImportErrors.push_back(*iter);
-            if( !d->m_pj_crs )
-            {
-                CPLError(CE_Failure, CPLE_AppDefined, "%s", *iter);
+        else
+        {
+            const char* const options[] = { "STRICT=NO", nullptr };
+            PROJ_STRING_LIST warnings = nullptr;
+            PROJ_STRING_LIST errors = nullptr;
+            d->setPjCRS(proj_create_from_wkt(
+                d->getPROJContext(), *ppszInput, options, &warnings, &errors));
+            for( auto iter = warnings; iter && *iter; ++iter ) {
+                d->m_wktImportWarnings.push_back(*iter);
             }
+            for( auto iter = errors; iter && *iter; ++iter ) {
+                d->m_wktImportErrors.push_back(*iter);
+                if( !d->m_pj_crs )
+                {
+                    CPLError(CE_Failure, CPLE_AppDefined, "%s", *iter);
+                }
+            }
+            if( warnings == nullptr && errors == nullptr )
+            {
+                canCache = true;
+            }
+            proj_string_list_destroy(warnings);
+            proj_string_list_destroy(errors);
         }
-        proj_string_list_destroy(warnings);
-        proj_string_list_destroy(errors);
     }
     if( !d->m_pj_crs )
         return OGRERR_CORRUPT_DATA;
@@ -1642,6 +1687,11 @@ OGRErr OGRSpatialReference::importFromWkt( const char ** ppszInput )
     {
         Clear();
         return OGRERR_CORRUPT_DATA;
+    }
+
+    if( canCache )
+    {
+        tlsCache->CachePJForWKT(osWkt, d->m_pj_crs);
     }
 
     if( strstr(*ppszInput, "CENTER_LONG") ) {
@@ -4843,7 +4893,7 @@ int OGRSpatialReference::FindProjParm( const char *pszParameter,
         const OGR_SRSNode *poParameter = poPROJCS->GetChild(iChild);
 
         if( EQUAL(poParameter->GetValue(), "PARAMETER")
-            && poParameter->GetChildCount() == 2
+            && poParameter->GetChildCount() >= 2
             && EQUAL(poPROJCS->GetChild(iChild)->GetChild(0)->GetValue(),
                      pszParameter) )
         {
@@ -4903,7 +4953,7 @@ double OGRSpatialReference::GetProjParm( const char * pszName,
 /* -------------------------------------------------------------------- */
 /*      Find the desired parameter.                                     */
 /* -------------------------------------------------------------------- */
-    const OGR_SRSNode *poPROJCS = GetAttrNode( "PROJCS" );
+    const OGR_SRSNode *poPROJCS = GetAttrNode( d->m_bNodesWKT2 ? "CONVERSION" : "PROJCS" );
     if( poPROJCS == nullptr )
     {
         if( pnErr != nullptr )
@@ -7237,6 +7287,61 @@ OGRErr OSRSetSCH( OGRSpatialReferenceH hSRS,
 
     return ToPointer(hSRS)->SetSCH(
         dfPegLat, dfPegLong, dfPegHeading, dfPegHgt );
+}
+
+
+/************************************************************************/
+/*                         SetVerticalPerspective()                     */
+/************************************************************************/
+
+OGRErr OGRSpatialReference::SetVerticalPerspective( double dfTopoOriginLat,
+                                                    double dfTopoOriginLon,
+                                                    double dfTopoOriginHeight,
+                                                    double dfViewPointHeight,
+                                                    double dfFalseEasting,
+                                                    double dfFalseNorthing )
+{
+#if PROJ_VERSION_MAJOR >= 7
+    return d->replaceConversionAndUnref(
+        proj_create_conversion_vertical_perspective(
+            d->getPROJContext(),
+            dfTopoOriginLat, dfTopoOriginLon,
+            dfTopoOriginHeight, dfViewPointHeight,
+            dfFalseEasting, dfFalseNorthing,
+            nullptr, 0, nullptr, 0));
+#else
+    CPL_IGNORE_RET_VAL(dfTopoOriginHeight); // ignored by PROJ
+
+    OGRSpatialReference oSRS;
+    CPLString oProj4String;
+    oProj4String.Printf(
+        "+proj=nsper +lat_0=%.18g +lon_0=%.18g +h=%.18g +x_0=%.18g +y_0=%.18g",
+         dfTopoOriginLat, dfTopoOriginLon, dfViewPointHeight,
+         dfFalseEasting, dfFalseNorthing);
+    oSRS.SetFromUserInput(oProj4String);
+    return d->replaceConversionAndUnref(
+        proj_crs_get_coordoperation(d->getPROJContext(), oSRS.d->m_pj_crs));
+#endif
+}
+
+/************************************************************************/
+/*                       OSRSetVerticalPerspective()                    */
+/************************************************************************/
+
+OGRErr OSRSetVerticalPerspective( OGRSpatialReferenceH hSRS,
+                                  double dfTopoOriginLat,
+                                  double dfTopoOriginLon,
+                                  double dfTopoOriginHeight,
+                                  double dfViewPointHeight,
+                                  double dfFalseEasting,
+                                  double dfFalseNorthing )
+
+{
+    VALIDATE_POINTER1( hSRS, "OSRSetVerticalPerspective", OGRERR_FAILURE );
+
+    return ToPointer(hSRS)->SetVerticalPerspective(
+        dfTopoOriginLat, dfTopoOriginLon, dfTopoOriginHeight,
+        dfViewPointHeight, dfFalseEasting, dfFalseNorthing );
 }
 
 /************************************************************************/
@@ -9736,7 +9841,14 @@ OGRErr OGRSpatialReference::importFromProj4( const char * pszProj4 )
 /*                          OSRExportToProj4()                          */
 /************************************************************************/
 /**
- * \brief Export coordinate system in PROJ format.
+ * \brief Export coordinate system in PROJ.4 legacy format.
+ *
+ * \warning Use of this function is discouraged. Its behaviour in GDAL &gt;= 3 /
+ * PROJ &gt;= 6 is significantly different from earlier versions. In particular
+ * +datum will only encode WGS84, NAD27 and NAD83, and +towgs84/+nadgrids terms
+ * will be missing most of the time. PROJ strings to encode CRS should be
+ * considered as a legacy solution. Using a AUTHORITY:CODE or WKT representation is the
+ * recommended way.
  *
  * This function is the same as OGRSpatialReference::exportToProj4().
  */
@@ -9756,7 +9868,14 @@ OGRErr CPL_STDCALL OSRExportToProj4( OGRSpatialReferenceH hSRS,
 /************************************************************************/
 
 /**
- * \brief Export coordinate system in PROJ format.
+ * \brief Export coordinate system in PROJ.4 legacy format.
+ *
+ * \warning Use of this function is discouraged. Its behaviour in GDAL &gt;= 3 /
+ * PROJ &gt;= 6 is significantly different from earlier versions. In particular
+ * +datum will only encode WGS84, NAD27 and NAD83, and +towgs84/+nadgrids terms
+ * will be missing most of the time. PROJ strings to encode CRS should be
+ * considered as a a legacy solution. Using a AUTHORITY:CODE or WKT representation is the
+ * recommended way.
  *
  * Converts the loaded coordinate reference system into PROJ format
  * to the extent possible.  The string returned in ppszProj4 should be
@@ -10062,6 +10181,19 @@ OGRErr OGRSpatialReference::importFromEPSGA( int nCode )
 {
     Clear();
 
+    const bool bUseNonDeprecated = CPLTestBool(
+                CPLGetConfigOption("OSR_USE_NON_DEPRECATED", "YES"));
+    auto tlsCache = bUseNonDeprecated ? OSRGetProjTLSCache() : nullptr;
+    if( tlsCache )
+    {
+        auto cachedObj = tlsCache->GetPJForEPSGCode(nCode);
+        if( cachedObj )
+        {
+            d->setPjCRS(cachedObj);
+            return OGRERR_NONE;
+        }
+    }
+
     CPLString osCode;
     osCode.Printf("%d", nCode);
     auto obj = proj_create_from_database(d->getPROJContext(),
@@ -10077,8 +10209,7 @@ OGRErr OGRSpatialReference::importFromEPSGA( int nCode )
 
     if( proj_is_deprecated(obj) ) {
         auto list = proj_get_non_deprecated(d->getPROJContext(), obj);
-        if( list && CPLTestBool(
-                CPLGetConfigOption("OSR_USE_NON_DEPRECATED", "YES")) ) {
+        if( list && bUseNonDeprecated ) {
             const auto count = proj_list_get_count(list);
             if( count == 1 ) {
                 auto nonDeprecated =
@@ -10101,6 +10232,12 @@ OGRErr OGRSpatialReference::importFromEPSGA( int nCode )
     }
 
     d->setPjCRS(obj);
+
+    if( tlsCache )
+    {
+        tlsCache->CachePJForEPSGCode(nCode, obj);
+    }
+
     return OGRERR_NONE;
 }
 
@@ -10963,3 +11100,51 @@ void OGRSpatialReference::UpdateCoordinateSystemFromGeogCRS()
 }
 
 /*! @endcond */
+
+/************************************************************************/
+/*                             PromoteTo3D()                            */
+/************************************************************************/
+
+/** \brief "Promotes" a 2D CRS to a 3D CRS one.
+ *
+ * The new axis will be ellipsoidal height, oriented upwards, and with metre
+ * units.
+ *
+ * @param pszName New name for the CRS. If set to NULL, the previous name will be used.
+ * @return OGRERR_NONE if no error occurred.
+ * @since GDAL 3.1 and PROJ 7.0
+ */
+OGRErr OGRSpatialReference::PromoteTo3D(const char* pszName)
+{
+#if PROJ_VERSION_MAJOR < 7
+    CPL_IGNORE_RET_VAL(pszName);
+    CPLError(CE_Failure, CPLE_NotSupported, "PROJ 7 required");
+    return OGRERR_UNSUPPORTED_OPERATION;
+#else
+    d->refreshProjObj();
+    if( !d->m_pj_crs )
+        return OGRERR_FAILURE;
+    auto newPj = proj_crs_promote_to_3D( d->getPROJContext(), pszName, d->m_pj_crs );
+    if( !newPj )
+        return OGRERR_FAILURE;
+    d->setPjCRS(newPj);
+    return OGRERR_NONE;
+#endif
+}
+
+/************************************************************************/
+/*                             OSRPromoteTo3D()                         */
+/************************************************************************/
+
+/** \brief "Promotes" a 2D CRS to a 3D CRS one.
+ *
+ * See OGRSpatialReference::PromoteTo3D()
+ *
+ * @since GDAL 3.1 and PROJ 7.0
+ */
+OGRErr OSRPromoteTo3D( OGRSpatialReferenceH hSRS, const char* pszName  )
+{
+    VALIDATE_POINTER1( hSRS, "OSRPromoteTo3D", OGRERR_FAILURE );
+
+    return OGRSpatialReference::FromHandle(hSRS)->PromoteTo3D(pszName);
+}

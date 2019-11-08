@@ -885,6 +885,17 @@ public:
     return OSRSetVDG( self, clong, fe, fn );
   }
 
+%feature( "kwargs" ) SetVerticalPerspective;
+  OGRErr SetVerticalPerspective( double topoOriginLat,
+                                 double topoOriginLon,
+                                 double topoOriginHeight,
+                                 double viewPointHeight,
+                                 double fe, double fn )
+  {
+    return OSRSetVerticalPerspective( self,
+        topoOriginLat, topoOriginLon, topoOriginHeight, viewPointHeight, fe, fn );
+  }
+
   OGRErr SetWellKnownGeogCS( const char *name ) {
     return OSRSetWellKnownGeogCS( self, name );
   }
@@ -1079,6 +1090,12 @@ public:
   OSRSpatialReferenceShadow* ConvertToOtherProjection(const char* other_projection, char **options = NULL) {
     return OSRConvertToOtherProjection(self, other_projection, options);
   }
+
+%clear const char* name;
+  OGRErr PromoteTo3D( const char* name = NULL ) {
+    return OSRPromoteTo3D(self, name);
+  }
+%apply Pointer NONNULL {const char* name};
 
 } /* %extend */
 };

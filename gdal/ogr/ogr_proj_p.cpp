@@ -60,6 +60,7 @@ struct OSRPJContextHolder
 {
     unsigned searchPathGenerationCounter = 0;
     PJ_CONTEXT* context = nullptr;
+    OSRProjTLSCache oCache{};
 
     OSRPJContextHolder() = default;
     ~OSRPJContextHolder();
@@ -89,6 +90,9 @@ OSRPJContextHolder::~OSRPJContextHolder()
 
 void OSRPJContextHolder::deinit()
 {
+    oCache.clear();
+
+    // Destroy context in last
     proj_context_destroy(context);
     context = nullptr;
 }
@@ -103,9 +107,9 @@ static void FreeProjTLSContextHolder( void* pData )
 static OSRPJContextHolder& GetProjTLSContextHolder()
 {
     static OSRPJContextHolder dummy;
-    int bMemoryErrorOccured = false;
-    void* pData = CPLGetTLSEx(CTLS_PROJCONTEXTHOLDER, &bMemoryErrorOccured);
-    if( bMemoryErrorOccured )
+    int bMemoryErrorOccurred = false;
+    void* pData = CPLGetTLSEx(CTLS_PROJCONTEXTHOLDER, &bMemoryErrorOccurred);
+    if( bMemoryErrorOccurred )
     {
         return dummy;
     }
@@ -114,8 +118,8 @@ static OSRPJContextHolder& GetProjTLSContextHolder()
         auto pHolder = new OSRPJContextHolder();
         CPLSetTLSWithFreeFuncEx( CTLS_PROJCONTEXTHOLDER,
                                  pHolder,
-                                 FreeProjTLSContextHolder, &bMemoryErrorOccured );
-        if( bMemoryErrorOccured )
+                                 FreeProjTLSContextHolder, &bMemoryErrorOccurred );
+        if( bMemoryErrorOccurred )
         {
             delete pHolder;
             return dummy;
@@ -153,6 +157,65 @@ PJ_CONTEXT* OSRGetProjTLSContext()
         }
     }
     return l_projContext.context;
+}
+
+/************************************************************************/
+/*                         OSRGetProjTLSCache()                         */
+/************************************************************************/
+
+OSRProjTLSCache* OSRGetProjTLSCache()
+{
+    auto& l_projContext = GetProjTLSContextHolder();
+    return &l_projContext.oCache;
+}
+
+struct OSRPJDeleter
+{
+    void operator()(PJ* pj) const { proj_destroy(pj); }
+};
+
+void OSRProjTLSCache::clear()
+{
+    m_oCacheEPSG.clear();
+    m_oCacheWKT.clear();
+}
+
+PJ* OSRProjTLSCache::GetPJForEPSGCode(int nCode)
+{
+    try
+    {
+        const auto& cached = m_oCacheEPSG.get(nCode);
+        return proj_clone(OSRGetProjTLSContext(), cached.get());
+    }
+    catch( const lru11::KeyNotFound& )
+    {
+        return nullptr;
+    }
+}
+
+void OSRProjTLSCache::CachePJForEPSGCode(int nCode, PJ* pj)
+{
+    m_oCacheEPSG.insert(nCode, std::shared_ptr<PJ>(
+                    proj_clone(OSRGetProjTLSContext(), pj), OSRPJDeleter()));
+}
+
+PJ* OSRProjTLSCache::GetPJForWKT(const std::string& wkt)
+{
+    try
+    {
+        const auto& cached = m_oCacheWKT.get(wkt);
+        return proj_clone(OSRGetProjTLSContext(), cached.get());
+    }
+    catch( const lru11::KeyNotFound& )
+    {
+        return nullptr;
+    }
+}
+
+void OSRProjTLSCache::CachePJForWKT(const std::string& wkt, PJ* pj)
+{
+    m_oCacheWKT.insert(wkt, std::shared_ptr<PJ>(
+                    proj_clone(OSRGetProjTLSContext(), pj), OSRPJDeleter()));
 }
 
 /************************************************************************/

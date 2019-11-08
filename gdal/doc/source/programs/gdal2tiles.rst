@@ -38,6 +38,13 @@ SuperOverlay), in case the supplied map uses EPSG:4326 projection.
 World files and embedded georeferencing is used during tile generation, but you
 can publish a picture without proper georeferencing too.
 
+.. note::
+
+    Inputs with non-Byte data type (i.e. ``Int16``, ``UInt16``,...) will be clamped to
+    the ``Byte`` data type, causing wrong results. To awoid this it is necessary to
+    rescale input to the ``Byte`` data type using `gdal_translate` utility.
+
+
 .. program:: gdal_translate
 
 .. option:: -p <PROFILE>, --profile=<PROFILE>
@@ -136,3 +143,13 @@ Options for generated HTML viewers a la Google Maps
 .. note::
 
     gdal2tiles.py is a Python script that needs to be run against Python GDAL binding.
+
+
+Examples
+--------
+
+Basic example:
+
+.. code-block::
+
+  gdal2tiles.py --zoom=2-5 input.tif output_folder

@@ -1227,10 +1227,10 @@ CPLErr GDALRasterBand::RasterIOResampled(
                             {
                                 GDALCopyWords(
                                     &fNoDataValue, GDT_Float32, 0,
-                                    static_cast<GByte*>(pData) +
-                                    nLineSpace * (j + nDstYOff) +
-                                    nDstXOff * nPixelSpace,
-                                    eBufType, static_cast<int>(nPixelSpace),
+                                    static_cast<GByte*>(pDataMem) +
+                                    nLSMem * (j + nDstYOff) +
+                                    nDstXOff * nPSMem,
+                                    eDTMem, static_cast<int>(nPSMem),
                                     nDstXCount);
                             }
                             bSkipResample = true;
@@ -2828,7 +2828,7 @@ static inline void GDALUnrolledCopyGeneric( T* CPL_RESTRICT pDest,
 {
     if (nIters >= 16)
     {
-        for ( decltype(nIters) i = nIters / 16; i != 0; i -- )
+        for ( GPtrDiff_t i = nIters / 16; i != 0; i -- )
         {
             pDest[0*dstStride] = pSrc[0*srcStride];
             pDest[1*dstStride] = pSrc[1*srcStride];
@@ -2851,7 +2851,7 @@ static inline void GDALUnrolledCopyGeneric( T* CPL_RESTRICT pDest,
         }
         nIters = nIters % 16;
     }
-    for( decltype(nIters) i = 0; i < nIters; i++ )
+    for( GPtrDiff_t i = 0; i < nIters; i++ )
     {
         pDest[i*dstStride] = *pSrc;
         pSrc += srcStride;

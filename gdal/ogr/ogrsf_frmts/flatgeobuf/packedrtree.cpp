@@ -1,9 +1,15 @@
+#ifdef GDAL_COMPILATION
+#include "cpl_port.h"
+#else
+#define CPL_IS_LSB 1
+#endif
+
 #include "packedrtree.h"
 
 namespace FlatGeobuf
 {
 
-void Rect::expand(Rect r)
+void Rect::expand(const Rect& r)
 {
     if (r.minX < minX) minX = r.minX;
     if (r.minY < minY) minY = r.minY;
@@ -21,7 +27,7 @@ Rect Rect::createInvertedInfiniteRect()
     };
 }
 
-bool Rect::intersects(Rect r) const
+bool Rect::intersects(const Rect& r) const
 {
     if (maxX < r.minX) return false;
     if (maxY < r.minY) return false;
@@ -85,7 +91,7 @@ uint32_t hilbert(uint32_t x, uint32_t y)
     return value;
 }
 
-uint32_t hilbert(Rect r, uint32_t hilbertMax, Rect extent)
+uint32_t hilbert(const Rect& r, uint32_t hilbertMax, const Rect& extent)
 {
     uint32_t x = static_cast<uint32_t>(floor(hilbertMax * ((r.minX + r.maxX) / 2 - extent.minX) / extent.width()));
     uint32_t y = static_cast<uint32_t>(floor(hilbertMax * ((r.minY + r.maxY) / 2 - extent.minY) / extent.height()));
@@ -108,16 +114,16 @@ void hilbertSort(std::vector<std::shared_ptr<Item>> &items)
     });
 }
 
-Rect calcExtent(std::vector<Rect> &rects)
+Rect calcExtent(const std::vector<Rect> &rects)
 {
-    Rect extent = std::accumulate(rects.begin(), rects.end(), Rect::createInvertedInfiniteRect(), [] (Rect a, Rect b) {
+    Rect extent = std::accumulate(rects.begin(), rects.end(), Rect::createInvertedInfiniteRect(), [] (Rect a, const Rect& b) {
         a.expand(b);
         return a;
     });
     return extent;
 }
 
-Rect calcExtent(std::vector<std::shared_ptr<Item>> &rectitems)
+Rect calcExtent(const std::vector<std::shared_ptr<Item>> &rectitems)
 {
     Rect extent = std::accumulate(rectitems.begin(), rectitems.end(), Rect::createInvertedInfiniteRect(), [] (Rect a, std::shared_ptr<Item> b) {
         a.expand(b->rect);
@@ -129,7 +135,7 @@ Rect calcExtent(std::vector<std::shared_ptr<Item>> &rectitems)
 void hilbertSort(std::vector<Rect> &items)
 {
     Rect extent = calcExtent(items);
-    std::sort(items.begin(), items.end(), [&extent] (Rect a, Rect b) {
+    std::sort(items.begin(), items.end(), [&extent] (const Rect& a, const Rect& b) {
         uint32_t ha = hilbert(a, hilbertMax, extent);
         uint32_t hb = hilbert(b, hilbertMax, extent);
         return ha > hb;
@@ -200,7 +206,7 @@ void PackedRTree::fromData(const void *data)
         _indices[i] = *pi++;
 }
 
-static std::vector<Rect> convert(std::vector<std::shared_ptr<Item>> &items)
+static std::vector<Rect> convert(const std::vector<std::shared_ptr<Item>> &items)
 {
     std::vector<Rect> rects;
     for (const std::shared_ptr<Item> item: items)
@@ -208,7 +214,7 @@ static std::vector<Rect> convert(std::vector<std::shared_ptr<Item>> &items)
     return rects;
 }
 
-PackedRTree::PackedRTree(std::vector<std::shared_ptr<Item>> &items, Rect extent, const uint16_t nodeSize) :
+PackedRTree::PackedRTree(const std::vector<std::shared_ptr<Item>> &items, const Rect& extent, const uint16_t nodeSize) :
     _extent(extent),
     _rects(convert(items)),
     _numItems(_rects.size())
@@ -217,7 +223,7 @@ PackedRTree::PackedRTree(std::vector<std::shared_ptr<Item>> &items, Rect extent,
     generateNodes();
 }
 
-PackedRTree::PackedRTree(std::vector<Rect> &rects, Rect extent, const uint16_t nodeSize) :
+PackedRTree::PackedRTree(const std::vector<Rect> &rects, const Rect& extent, const uint16_t nodeSize) :
     _extent(extent),
     _rects(rects),
     _numItems(_rects.size())
@@ -264,7 +270,7 @@ std::vector<uint64_t> PackedRTree::search(double minX, double minY, double maxX,
 }
 
 std::vector<uint64_t> PackedRTree::streamSearch(
-    const uint64_t numItems, const uint16_t nodeSize, Rect r,
+    const uint64_t numItems, const uint16_t nodeSize, const Rect& r,
     const std::function<void(uint8_t *, size_t, size_t)> &readNode)
 {
     auto levelBounds = generateLevelBounds(numItems, nodeSize);
@@ -291,8 +297,23 @@ std::vector<uint64_t> PackedRTree::streamSearch(
         if (!isLeafNode) {
             auto offset = numNodes * sizeof(Rect) + (nodeIndex - numItems) * sizeof(uint32_t);
             readNode(nodeIndicesBuf, static_cast<size_t>(offset), static_cast<size_t>(length * sizeof(uint32_t)));
+#if !CPL_IS_LSB
+            for( size_t i = 0; i < static_cast<size_t>(length); i++ )
+            {
+                CPL_LSBPTR32(&nodeIndices[i]);
+            }
+#endif
         }
         readNode(nodeRectsBuf, static_cast<size_t>(nodeIndex * sizeof(Rect)), static_cast<size_t>(length * sizeof(Rect)));
+#if !CPL_IS_LSB
+        for( size_t i = 0; i < static_cast<size_t>(length); i++ )
+        {
+            CPL_LSBPTR64(&nodeRects[i].minX);
+            CPL_LSBPTR64(&nodeRects[i].minY);
+            CPL_LSBPTR64(&nodeRects[i].maxX);
+            CPL_LSBPTR64(&nodeRects[i].maxY);
+        }
+#endif
         // search through child nodes
         for (uint64_t pos = nodeIndex; pos < end; pos++) {
             uint64_t nodePos = pos - nodeIndex;
@@ -318,8 +339,9 @@ uint64_t PackedRTree::size(const uint64_t numItems, const uint16_t nodeSize)
     if (numItems == 0)
         throw std::invalid_argument("Number of items must be greater than 0");
     const uint16_t nodeSizeMin = std::min(std::max(nodeSize, static_cast<uint16_t>(2)), static_cast<uint16_t>(65535));
-    if (numItems > std::numeric_limits<uint64_t>::max() - ((numItems / nodeSizeMin) * 2))
-        throw std::overflow_error("Number of items too large");
+    // limit so that resulting size in bytes can be represented by uint64_t
+    if (numItems > static_cast<uint64_t>(1) << 56)
+        throw std::overflow_error("Number of items must be less than 2^56");
     uint64_t n = numItems;
     uint64_t numNodes = n;
     do {
@@ -332,6 +354,21 @@ uint64_t PackedRTree::size(const uint64_t numItems, const uint16_t nodeSize)
 }
 
 void PackedRTree::streamWrite(const std::function<void(uint8_t *, size_t)> &writeData) {
+#if !CPL_IS_LSB
+    // Note: we should normally revert endianness after writing, but as we no longer
+    // use the data structures this is not needed.
+    for( size_t i = 0; i < _rects.size(); i++ )
+    {
+        CPL_LSBPTR64(&_rects[i].minX);
+        CPL_LSBPTR64(&_rects[i].minY);
+        CPL_LSBPTR64(&_rects[i].maxX);
+        CPL_LSBPTR64(&_rects[i].maxY);
+    }
+    for( size_t i = 0; i < _indices.size(); i++ )
+    {
+        CPL_LSBPTR32(&_indices[i]);
+    }
+#endif
     writeData(reinterpret_cast<uint8_t *>(_rects.data()), _rects.size() * sizeof(Rect));
     writeData(reinterpret_cast<uint8_t *>(_indices.data()), _indices.size() * sizeof(uint32_t));
     writeData(reinterpret_cast<uint8_t *>(_indices.data()), (_numNonLeafNodes % 2) * sizeof(uint32_t));

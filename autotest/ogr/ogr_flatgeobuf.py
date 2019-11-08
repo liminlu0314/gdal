@@ -33,6 +33,8 @@
 import os
 
 from osgeo import ogr
+from osgeo import osr
+from osgeo import gdal
 
 import gdaltest
 import ogrtest
@@ -95,7 +97,7 @@ def verify_flatgeobuf_copy(name, fids, names):
     return True
 
 
-def copy_shape_to_flatgeobuf(name, wkbType, compress=None):
+def copy_shape_to_flatgeobuf(name, wkbType, compress=None, options=[]):
     if gdaltest.flatgeobuf_drv is None:
         return False
 
@@ -117,7 +119,7 @@ def copy_shape_to_flatgeobuf(name, wkbType, compress=None):
 
     ######################################################
     # Create layer
-    lyr = ds.CreateLayer(name, None, wkbType)
+    lyr = ds.CreateLayer(name, None, wkbType, options)
     if lyr is None:
         return False
 
@@ -168,7 +170,11 @@ def test_ogr_flatgeobuf_2():
     fgb_ds = ogr.Open('data/testfgb/poly.fgb')
     fgb_lyr = fgb_ds.GetLayer(0)
 
+    assert fgb_lyr.TestCapability(ogr.OLCFastGetExtent)
+    assert fgb_lyr.GetExtent() == (478315.53125, 481645.3125, 4762880.5, 4765610.5)
+
     # test expected spatial filter feature count consistency
+    assert fgb_lyr.TestCapability(ogr.OLCFastFeatureCount)
     c = fgb_lyr.GetFeatureCount()
     assert c == 10
     c = fgb_lyr.SetSpatialFilterRect(478315.531250, 4762880.500000, 481645.312500, 4765610.500000)
@@ -205,6 +211,62 @@ def test_ogr_flatgeobuf_2():
     else:
         assert num == 5
 
+def wktRoundtrip(expected):
+    ds = ogr.GetDriverByName('FlatGeobuf').CreateDataSource('/vsimem/test.fgb')
+    g = ogr.CreateGeometryFromWkt(expected)
+    lyr = ds.CreateLayer('test', None, g.GetGeometryType(), [])
+    f = ogr.Feature(lyr.GetLayerDefn())
+    f.SetGeometry(g)
+    lyr.CreateFeature(f)
+    ds = None
+
+    ds = ogr.Open('/vsimem/test.fgb')
+    lyr = ds.GetLayer(0)
+    f = lyr.GetNextFeature()
+    g = f.GetGeometryRef()
+    actual = g.ExportToIsoWkt()
+    ds = None
+
+    ogr.GetDriverByName('FlatGeobuf').DeleteDataSource('/vsimem/test.fgb')
+    assert not gdal.VSIStatL('/vsimem/test.fgb')
+
+    assert actual == expected
+
+def test_ogr_flatgeobuf_3():
+    if gdaltest.flatgeobuf_drv is None:
+        pytest.skip()
+    wktRoundtrip('POINT (1 1)')
+    wktRoundtrip('POINT (1.1234 1.4321)')
+    wktRoundtrip('POINT (1.12345678901234 1.4321)') # max precision 15 decimals
+    #wktRoundtrip('POINT (1.123456789012341 1.4321)') # 16 decimals, will not pass
+    wktRoundtrip('POINT (1.2 -2.1)')
+    wktRoundtrip('MULTIPOINT ((10 40),(40 30),(20 20),(30 10))')
+    wktRoundtrip('LINESTRING (1.2 -2.1,2.4 -4.8)')
+    wktRoundtrip('MULTILINESTRING ((10 10,20 20,10 40),(40 40,30 30,40 20,30 10),(50 50,60 60,50 90))')
+    wktRoundtrip('MULTILINESTRING ((1.2 -2.1,2.4 -4.8))')
+    wktRoundtrip('POLYGON ((30 10,40 40,20 40,10 20,30 10))')
+    wktRoundtrip('POLYGON ((35 10,45 45,15 40,10 20,35 10),(20 30,35 35,30 20,20 30))')
+    wktRoundtrip('MULTIPOLYGON (((30 20,45 40,10 40,30 20)),((15 5,40 10,10 20,5 10,15 5)))')
+    wktRoundtrip('MULTIPOLYGON (((40 40,20 45,45 30,40 40)),((20 35,10 30,10 10,30 5,45 20,20 35),(30 20,20 15,20 25,30 20)))')
+    wktRoundtrip('MULTIPOLYGON (((30 20,45 40,10 40,30 20)))')
+    wktRoundtrip('MULTIPOLYGON (((35 10,45 45,15 40,10 20,35 10),(20 30,35 35,30 20,20 30)))')
+
+    wktRoundtrip('POINT Z (1 2 3)')
+    wktRoundtrip('POINT M (1 2 3)')
+    wktRoundtrip('POINT ZM (1 2 3 4)')
+    wktRoundtrip('MULTIPOINT Z ((10 40 1),(40 30 2),(20 20 3),(30 10 4))')
+    wktRoundtrip('MULTIPOINT M ((10 40 1),(40 30 2),(20 20 3),(30 10 4))')
+    wktRoundtrip('MULTIPOINT ZM ((10 40 1 4),(40 30 2 3),(20 20 3 2),(30 10 4 1))')
+    wktRoundtrip('LINESTRING Z (1 2 3,2 3 4)')
+    wktRoundtrip('LINESTRING M (1 2 3,2 3 4)')
+    wktRoundtrip('LINESTRING ZM (1 2 3 4,2 3 4 5)')
+    wktRoundtrip('POLYGON Z ((30 10 1,40 40 2,20 40 3,10 20 4,30 10 5))')
+    wktRoundtrip('POLYGON M ((30 10 1,40 40 2,20 40 3,10 20 4,30 10 5))')
+    wktRoundtrip('POLYGON ZM ((30 10 1 5,40 40 2 4,20 40 3 3,10 20 4 2,30 10 5 1))')
+    wktRoundtrip('MULTIPOLYGON Z (((35 10 1,45 45 2,15 40 3,10 20 4,35 10 5),(20 30 1,35 35 2,30 20 3,20 30 4)))')
+    wktRoundtrip('MULTIPOLYGON M (((35 10 1,45 45 2,15 40 3,10 20 4,35 10 5),(20 30 1,35 35 2,30 20 3,20 30 4)))')
+    wktRoundtrip('MULTIPOLYGON ZM (((35 10 1 5,45 45 2 4,15 40 3 3,10 20 4 2,35 10 1 1),(20 30 4 1,35 35 3 2,30 20 2 3,20 30 1 4)))')
+
 # Run test_ogrsf
 def test_ogr_flatgeobuf_8():
 
@@ -238,3 +300,101 @@ def test_ogr_flatgeobuf_9():
         rc = verify_flatgeobuf_copy(test[0], test[1], test[2])
         assert rc, ('Verification of copy of ' + test[0] + '.shp failed')
 
+    for i in range(len(gdaltest.tests)):
+        test = gdaltest.tests[i]
+
+        rc = copy_shape_to_flatgeobuf(test[0], test[3], None, ['SPATIAL_INDEX=NO'])
+        assert rc, ('Failed making copy of ' + test[0] + '.shp')
+
+        rc = verify_flatgeobuf_copy(test[0], test[1], test[2])
+        assert rc, ('Verification of copy of ' + test[0] + '.shp failed')
+
+
+# Test support for multiple layers in a directory
+
+
+def test_ogr_flatgeobuf_directory():
+    if gdaltest.flatgeobuf_drv is None:
+        pytest.skip()
+
+    ds = ogr.GetDriverByName('FlatGeobuf').CreateDataSource('/vsimem/multi_layer')
+    with gdaltest.error_handler(): # name will be laundered
+        ds.CreateLayer('foo<', geom_type = ogr.wkbPoint)
+    ds.CreateLayer('bar', geom_type = ogr.wkbPoint)
+    ds = None
+
+    ds = gdal.OpenEx('/vsimem/multi_layer')
+    assert set(ds.GetFileList()) == set(['/vsimem/multi_layer/bar.fgb', '/vsimem/multi_layer/foo_.fgb'])
+    assert ds.GetLayer('foo<')
+    assert ds.GetLayer('bar')
+    ds = None
+
+    ogr.GetDriverByName('FlatGeobuf').DeleteDataSource('/vsimem/multi_layer')
+    assert not gdal.VSIStatL('/vsimem/multi_layer')
+
+
+def test_ogr_flatgeobuf_srs_epsg():
+    ds = ogr.GetDriverByName('FlatGeobuf').CreateDataSource('/vsimem/test.fgb')
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(32631)
+    ds.CreateLayer('test', srs = srs, geom_type = ogr.wkbPoint)
+    ds = None
+
+    ds = ogr.Open('/vsimem/test.fgb')
+    lyr = ds.GetLayer(0)
+    srs_got = lyr.GetSpatialRef()
+    assert srs_got.IsSame(srs)
+    assert srs_got.GetAuthorityName(None) == 'EPSG'
+    assert srs_got.GetAuthorityCode(None) == '32631'
+    ds = None
+
+    ogr.GetDriverByName('FlatGeobuf').DeleteDataSource('/vsimem/test.fgb')
+    assert not gdal.VSIStatL('/vsimem/test.fgb')
+
+
+def test_ogr_flatgeobuf_srs_other_authority():
+    ds = ogr.GetDriverByName('FlatGeobuf').CreateDataSource('/vsimem/test.fgb')
+    srs = osr.SpatialReference()
+    srs.SetFromUserInput("ESRI:104009")
+    srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    ds.CreateLayer('test', srs = srs, geom_type = ogr.wkbPoint)
+    ds = None
+
+    ds = ogr.Open('/vsimem/test.fgb')
+    lyr = ds.GetLayer(0)
+    srs_got = lyr.GetSpatialRef()
+    assert srs_got.IsSame(srs)
+    assert srs_got.GetAuthorityName(None) == 'ESRI'
+    assert srs_got.GetAuthorityCode(None) == '104009'
+    ds = None
+
+    ogr.GetDriverByName('FlatGeobuf').DeleteDataSource('/vsimem/test.fgb')
+    assert not gdal.VSIStatL('/vsimem/test.fgb')
+
+
+def test_ogr_flatgeobuf_srs_no_authority():
+    ds = ogr.GetDriverByName('FlatGeobuf').CreateDataSource('/vsimem/test.fgb')
+    srs = osr.SpatialReference()
+    srs.SetFromUserInput("+proj=longlat +ellps=clrk66")
+    ds.CreateLayer('test', srs = srs, geom_type = ogr.wkbPoint)
+    ds = None
+
+    ds = ogr.Open('/vsimem/test.fgb')
+    lyr = ds.GetLayer(0)
+    srs_got = lyr.GetSpatialRef()
+    assert srs_got.IsSame(srs)
+    assert srs_got.GetAuthorityName(None) is None
+    ds = None
+
+    ogr.GetDriverByName('FlatGeobuf').DeleteDataSource('/vsimem/test.fgb')
+    assert not gdal.VSIStatL('/vsimem/test.fgb')
+
+def test_ogr_flatgeobuf_datatypes():
+    ds = ogr.Open('data/testfgb/testdatatypes.fgb')
+    lyr = ds.GetLayer(0)
+    f = lyr.GetNextFeature()
+    assert f['int'] == 1
+    assert f['int64'] == 1234567890123
+    assert f['double'] == 1.25
+    assert f['string'] == 'my string'
+    assert f['datetime'] == '2019/10/15 12:34:56.789+00'

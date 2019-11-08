@@ -358,6 +358,8 @@ class CPL_DLL OGRSpatialReference
                                const OGRSpatialReference *poHorizSRS,
                                const OGRSpatialReference *poVertSRS );
 
+    OGRErr      PromoteTo3D( const char* pszName );
+
     OGRErr      SetFromUserInput( const char * );
 
     OGRErr      SetTOWGS84( double, double, double,
@@ -636,6 +638,15 @@ class CPL_DLL OGRSpatialReference
     /** Spherical, Cross-track, Height */
     OGRErr      SetSCH( double dfPegLat, double dfPegLong,
                         double dfPegHeading, double dfPegHgt);
+
+    /** Vertical Perspective / Near-sided Perspective */
+    OGRErr      SetVerticalPerspective( double dfTopoOriginLat,
+                                        double dfTopoOriginLon,
+                                        double dfTopoOriginHeight,
+                                        double dfViewPointHeight,
+                                        double dfFalseEasting,
+                                        double dfFalseNorthing);
+
     /** State Plane */
     OGRErr      SetStatePlane( int nZone, int bNAD83 = TRUE,
                                const char *pszOverrideUnitName = nullptr,

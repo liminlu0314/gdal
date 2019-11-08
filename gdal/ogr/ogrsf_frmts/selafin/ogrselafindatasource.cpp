@@ -32,6 +32,7 @@
 #include "cpl_vsi.h"
 #include "io_selafin.h"
 
+#include <algorithm>
 #include <ctime>
 
 CPL_CVSID("$Id$")
@@ -425,7 +426,7 @@ int OGRSelafinDataSource::OpenTable(const char * pszFilename) {
         SelafinTypeDef eType=(j==0)?POINTS:ELEMENTS;
         for (int i=0;i<poHeader->nSteps;++i) {
             if (poRange.contains(eType,i)) {
-                char szTemp[30];
+                char szTemp[30] = {};
                 double dfTime = 0.0;
                 if( VSIFSeekL(fp, poHeader->getPosition(i)+4, SEEK_SET)!=0 ||
                     Selafin::read_float(fp, dfTime)==0 )
@@ -436,8 +437,8 @@ int OGRSelafinDataSource::OpenTable(const char * pszFilename) {
                 if (poHeader->panStartDate==nullptr) snprintf(szTemp,29,"%d",i); else {
                     struct tm sDate;
                     memset(&sDate, 0, sizeof(sDate));
-                    sDate.tm_year=poHeader->panStartDate[0]-1900;
-                    sDate.tm_mon=poHeader->panStartDate[1]-1;
+                    sDate.tm_year=std::max(poHeader->panStartDate[0], 0) - 1900;
+                    sDate.tm_mon=std::max(poHeader->panStartDate[1], 1) - 1;
                     sDate.tm_mday=poHeader->panStartDate[2];
                     sDate.tm_hour=poHeader->panStartDate[3];
                     sDate.tm_min=poHeader->panStartDate[4];
