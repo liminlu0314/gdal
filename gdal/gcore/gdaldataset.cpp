@@ -3040,6 +3040,82 @@ GDALOpen( const char * pszFilename, GDALAccess eAccess )
 }
 
 /************************************************************************/
+/*                         AntiRecursionStruct                          */
+/************************************************************************/
+
+namespace {
+// Prevent infinite recursion.
+struct AntiRecursionStruct
+{
+    struct DatasetContext
+    {
+        std::string osFilename;
+        int         nOpenFlags;
+        int         nSizeAllowedDrivers;
+
+        DatasetContext(const std::string& osFilenameIn,
+                        int nOpenFlagsIn,
+                        int nSizeAllowedDriversIn) :
+            osFilename(osFilenameIn),
+            nOpenFlags(nOpenFlagsIn),
+            nSizeAllowedDrivers(nSizeAllowedDriversIn) {}
+    };
+
+    struct DatasetContextCompare {
+        bool operator() (const DatasetContext& lhs, const DatasetContext& rhs) const {
+            return lhs.osFilename < rhs.osFilename ||
+                    (lhs.osFilename == rhs.osFilename &&
+                    (lhs.nOpenFlags < rhs.nOpenFlags ||
+                        (lhs.nOpenFlags == rhs.nOpenFlags &&
+                        lhs.nSizeAllowedDrivers < rhs.nSizeAllowedDrivers)));
+        }
+    };
+
+    std::set<DatasetContext, DatasetContextCompare> aosDatasetNamesWithFlags{};
+    int nRecLevel = 0;
+};
+} // namespace
+
+#ifdef WIN32
+// Currently thread_local and C++ objects don't work well with DLL on Windows
+static void FreeAntiRecursion( void* pData )
+{
+    delete static_cast<AntiRecursionStruct*>(pData);
+}
+
+static AntiRecursionStruct& GetAntiRecursion()
+{
+    static AntiRecursionStruct dummy;
+    int bMemoryErrorOccured = false;
+    void* pData = CPLGetTLSEx(CTLS_GDALOPEN_ANTIRECURSION, &bMemoryErrorOccured);
+    if( bMemoryErrorOccured )
+    {
+        return dummy;
+    }
+    if( pData == nullptr)
+    {
+        auto pAntiRecursion = new AntiRecursionStruct();
+        CPLSetTLSWithFreeFuncEx( CTLS_GDALOPEN_ANTIRECURSION,
+                                 pAntiRecursion,
+                                 FreeAntiRecursion, &bMemoryErrorOccured );
+        if( bMemoryErrorOccured )
+        {
+            delete pAntiRecursion;
+            return dummy;
+        }
+        return *pAntiRecursion;
+    }
+    return *static_cast<AntiRecursionStruct*>(pData);
+}
+#else
+static thread_local AntiRecursionStruct g_tls_antiRecursion;
+static AntiRecursionStruct& GetAntiRecursion()
+{
+    return g_tls_antiRecursion;
+}
+#endif
+
+/************************************************************************/
 /*                             GDALOpenEx()                             */
 /************************************************************************/
 
@@ -3177,7 +3253,7 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
 
     // If no driver kind is specified, assume all are to be probed.
     if( (nOpenFlags & GDAL_OF_KIND_MASK) == 0 )
-        nOpenFlags |= GDAL_OF_KIND_MASK;
+        nOpenFlags |= GDAL_OF_KIND_MASK & ~GDAL_OF_MULTIDIM_RASTER;
 
     GDALDriverManager *poDM = GetGDALDriverManager();
     // CPLLocaleC  oLocaleForcer;
@@ -3192,37 +3268,7 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
                            const_cast<char **>(papszSiblingFiles));
     oOpenInfo.papszAllowedDrivers = papszAllowedDrivers;
 
-    // Prevent infinite recursion.
-    struct AntiRecursionStruct
-    {
-        struct DatasetContext
-        {
-            std::string osFilename;
-            int         nOpenFlags;
-            int         nSizeAllowedDrivers;
-
-            DatasetContext(const std::string& osFilenameIn,
-                           int nOpenFlagsIn,
-                           int nSizeAllowedDriversIn) :
-                osFilename(osFilenameIn),
-                nOpenFlags(nOpenFlagsIn),
-                nSizeAllowedDrivers(nSizeAllowedDriversIn) {}
-        };
-
-        struct DatasetContextCompare {
-            bool operator() (const DatasetContext& lhs, const DatasetContext& rhs) const {
-                return lhs.osFilename < rhs.osFilename ||
-                       (lhs.osFilename == rhs.osFilename &&
-                        (lhs.nOpenFlags < rhs.nOpenFlags ||
-                         (lhs.nOpenFlags == rhs.nOpenFlags &&
-                          lhs.nSizeAllowedDrivers < rhs.nSizeAllowedDrivers)));
-            }
-        };
-
-        std::set<DatasetContext, DatasetContextCompare> aosDatasetNamesWithFlags{};
-        int nRecLevel = 0;
-    };
-    static thread_local AntiRecursionStruct sAntiRecursion;
+    AntiRecursionStruct& sAntiRecursion = GetAntiRecursion();
     if( sAntiRecursion.nRecLevel == 100 )
     {
         CPLError(CE_Failure, CPLE_AppDefined,
@@ -3277,6 +3323,10 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
         if( (nOpenFlags & GDAL_OF_VECTOR) != 0 &&
             (nOpenFlags & GDAL_OF_RASTER) == 0 &&
             poDriver->GetMetadataItem(GDAL_DCAP_VECTOR) == nullptr )
+            continue;
+        if( (nOpenFlags & GDAL_OF_MULTIDIM_RASTER) != 0 &&
+            (nOpenFlags & GDAL_OF_RASTER) == 0 &&
+            poDriver->GetMetadataItem(GDAL_DCAP_MULTIDIM_RASTER) == nullptr )
             continue;
         if( poDriver->pfnOpen == nullptr &&
             poDriver->pfnOpenWithDriverArg == nullptr )
@@ -7332,6 +7382,8 @@ void GDALDataset::TemporarilyDropReadWriteLock()
 #endif
         for(int i = 0; i < nCount + 1; i++)
         {
+            // The mutex is recursive
+            // coverity[double_unlock]
             CPLReleaseMutex(m_poPrivate->hMutex);
         }
     }
@@ -7369,6 +7421,8 @@ void GDALDataset::ReacquireReadWriteLock()
             CPLReleaseMutex(m_poPrivate->hMutex);
         for(int i = 0; i < nCount - 1; i++)
         {
+            // The mutex is recursive
+            // coverity[double_lock]
             CPLAcquireMutex(m_poPrivate->hMutex, 1000.0);
         }
     }
@@ -7924,4 +7978,23 @@ GDALRasterBand* GDALDataset::Bands::operator[](int iBand)
 GDALRasterBand* GDALDataset::Bands::operator[](size_t iBand)
 {
     return m_poSelf->GetRasterBand(1+static_cast<int>(iBand));
+}
+
+/************************************************************************/
+/*                           GetRootGroup()                             */
+/************************************************************************/
+
+/**
+ \brief Return the root GDALGroup of this dataset.
+
+ Only valid for multidimensional datasets.
+ 
+ This is the same as the C function GDALDatasetGetRootGroup().
+
+ @since GDAL 3.1
+*/
+
+std::shared_ptr<GDALGroup> GDALDataset::GetRootGroup() const
+{
+    return nullptr;
 }

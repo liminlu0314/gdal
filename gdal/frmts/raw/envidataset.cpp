@@ -337,12 +337,6 @@ void ENVIDataset::FlushCache()
         return;
 
     // Rewrite out the header.
-#ifdef CPL_LSB
-    const int iBigEndian = 0;
-#else
-    const int iBigEndian = 1;
-#endif
-
     bool bOK = VSIFPrintfL(fp, "ENVI\n") >= 0;
     if ("" != sDescription)
         bOK &= VSIFPrintfL(fp, "description = {\n%s}\n",
@@ -377,7 +371,13 @@ void ENVIDataset::FlushCache()
         break;
     }
     bOK &= VSIFPrintfL(fp, "interleave = %s\n", pszInterleaving) >= 0;
-    bOK &= VSIFPrintfL(fp, "byte order = %d\n", iBigEndian) >= 0;
+
+    const char* pszByteOrder = m_aosHeader["byte_order"];
+    if( pszByteOrder )
+    {
+        // Supposed to be required
+        bOK &= VSIFPrintfL(fp, "byte order = %s\n", pszByteOrder) >= 0;
+    }
 
     // Write class and color information.
     catNames = band->GetCategoryNames();
@@ -1821,6 +1821,12 @@ void ENVIDataset::ProcessGeoPoints( const char *pszGeoPoints )
     CSLDestroy(papszFields);
 }
 
+static unsigned byteSwapUInt(unsigned swapMe)
+{
+    CPL_MSBPTR32(&swapMe);
+    return swapMe;
+}
+
 void ENVIDataset::ProcessStatsFile()
 {
     osStaFilename = CPLResetExtension(pszHDRFilename, "sta");
@@ -1853,10 +1859,10 @@ void ENVIDataset::ProcessStatsFile()
     }
 
     // TODO(schwehr): What are 1, 4, 8, and 40?
-    int lOffset = 0;
+    unsigned lOffset = 0;
     if( VSIFSeekL(fpStaFile, 40 + static_cast<vsi_l_offset>(nb + 1) * 4, SEEK_SET) == 0 &&
-        VSIFReadL(&lOffset, sizeof(int), 1, fpStaFile) == 1 &&
-        VSIFSeekL(fpStaFile, 40 + static_cast<vsi_l_offset>(nb + 1) * 8 + byteSwapInt(lOffset) + nb,
+        VSIFReadL(&lOffset, sizeof(lOffset), 1, fpStaFile) == 1 &&
+        VSIFSeekL(fpStaFile, 40 + static_cast<vsi_l_offset>(nb + 1) * 8 + byteSwapUInt(lOffset) + nb,
                   SEEK_SET) == 0)
     {
         // This should be the beginning of the statistics.

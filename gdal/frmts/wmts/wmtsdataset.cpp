@@ -126,7 +126,7 @@ class WMTSTileMatrixSet
 /* ==================================================================== */
 /************************************************************************/
 
-class WMTSDataset : public GDALPamDataset
+class WMTSDataset final: public GDALPamDataset
 {
   friend class WMTSBand;
 
@@ -202,7 +202,7 @@ class WMTSDataset : public GDALPamDataset
 /* ==================================================================== */
 /************************************************************************/
 
-class WMTSBand : public GDALPamRasterBand
+class WMTSBand final: public GDALPamRasterBand
 {
   public:
                   WMTSBand(WMTSDataset* poDS, int nBand);

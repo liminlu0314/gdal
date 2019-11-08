@@ -285,7 +285,7 @@ static double DConvert( VSILFILE *fp, int nCharCount )
 
 class USGSDEMRasterBand;
 
-class USGSDEMDataset : public GDALPamDataset
+class USGSDEMDataset final: public GDALPamDataset
 {
     friend class USGSDEMRasterBand;
 
@@ -322,7 +322,7 @@ class USGSDEMDataset : public GDALPamDataset
 /* ==================================================================== */
 /************************************************************************/
 
-class USGSDEMRasterBand : public GDALPamRasterBand
+class USGSDEMRasterBand final: public GDALPamRasterBand
 {
     friend class USGSDEMDataset;
 
@@ -807,7 +807,10 @@ int USGSDEMDataset::LoadFromFile(VSILFILE *InDem)
         adfGeoTransform[5] = (-dydelta) / 3600.0;
     }
 
-    if (!GDALCheckDatasetDimensions(nRasterXSize, nRasterYSize))
+    // IReadBlock() not ready for more than INT_MAX pixels, and that
+    // would behave badly
+    if (!GDALCheckDatasetDimensions(nRasterXSize, nRasterYSize) ||
+        nRasterXSize > INT_MAX / nRasterYSize)
     {
         return FALSE;
     }

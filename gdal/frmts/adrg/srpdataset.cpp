@@ -41,7 +41,7 @@
 
 CPL_CVSID("$Id$")
 
-class SRPDataset : public GDALPamDataset
+class SRPDataset final: public GDALPamDataset
 {
     friend class SRPRasterBand;
 
@@ -105,7 +105,7 @@ class SRPDataset : public GDALPamDataset
 /* ==================================================================== */
 /************************************************************************/
 
-class SRPRasterBand : public GDALPamRasterBand
+class SRPRasterBand final: public GDALPamRasterBand
 {
     friend class SRPDataset;
 
@@ -199,7 +199,7 @@ CPLErr SRPRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
 /* -------------------------------------------------------------------- */
 /*      Is this a null block?                                           */
 /* -------------------------------------------------------------------- */
-    if (l_poDS->TILEINDEX && l_poDS->TILEINDEX[nBlock] == 0)
+    if (l_poDS->TILEINDEX && l_poDS->TILEINDEX[nBlock] <= 0)
     {
         memset(pImage, 0, 128 * 128);
         return CE_None;
@@ -580,7 +580,7 @@ bool SRPDataset::GetFromRecord( const char* pszFileName, DDFRecord * record )
         {
             TILEINDEX = new int [NFL * NFC];
         }
-        catch( const std::bad_alloc& )
+        catch( const std::exception& )
         {
             return false;
         }

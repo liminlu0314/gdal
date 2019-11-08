@@ -31,6 +31,7 @@ Vector drivers
    elasticsearch
    esrijson
    filegdb
+   flatgeobuf
    fme
    geoconcept
    geojson
@@ -85,6 +86,7 @@ Vector drivers
    segy
    selafin
    shapefile
+   sosi
    sqlite
    sua
    svg

@@ -27,6 +27,7 @@
  ****************************************************************************/
 
 #include "cpl_error.h"
+#include "cpl_multiproc.h"
 #include "cpl_string.h"
 
 #include "ogr_proj_p.h"
@@ -60,7 +61,7 @@ struct OSRPJContextHolder
     unsigned searchPathGenerationCounter = 0;
     PJ_CONTEXT* context = nullptr;
 
-    OSRPJContextHolder();
+    OSRPJContextHolder() = default;
     ~OSRPJContextHolder();
 
     void init();
@@ -70,12 +71,6 @@ private:
     OSRPJContextHolder(const OSRPJContextHolder&) = delete;
     OSRPJContextHolder& operator=(const OSRPJContextHolder&) = delete;
 };
-
-
-OSRPJContextHolder::OSRPJContextHolder()
-{
-    init();
-}
 
 void OSRPJContextHolder::init()
 {
@@ -98,15 +93,52 @@ void OSRPJContextHolder::deinit()
     context = nullptr;
 }
 
+#ifdef WIN32
+// Currently thread_local and C++ objects don't work well with DLL on Windows
+static void FreeProjTLSContextHolder( void* pData )
+{
+    delete static_cast<OSRPJContextHolder*>(pData);
+}
 
+static OSRPJContextHolder& GetProjTLSContextHolder()
+{
+    static OSRPJContextHolder dummy;
+    int bMemoryErrorOccured = false;
+    void* pData = CPLGetTLSEx(CTLS_PROJCONTEXTHOLDER, &bMemoryErrorOccured);
+    if( bMemoryErrorOccured )
+    {
+        return dummy;
+    }
+    if( pData == nullptr)
+    {
+        auto pHolder = new OSRPJContextHolder();
+        CPLSetTLSWithFreeFuncEx( CTLS_PROJCONTEXTHOLDER,
+                                 pHolder,
+                                 FreeProjTLSContextHolder, &bMemoryErrorOccured );
+        if( bMemoryErrorOccured )
+        {
+            delete pHolder;
+            return dummy;
+        }
+        return *pHolder;
+    }
+    return *static_cast<OSRPJContextHolder*>(pData);
+}
+#else
 static thread_local OSRPJContextHolder g_tls_projContext;
+static OSRPJContextHolder& GetProjTLSContextHolder()
+{
+    return g_tls_projContext;
+}
+#endif
+
 
 PJ_CONTEXT* OSRGetProjTLSContext()
 {
-    auto& l_projContext = g_tls_projContext;
+    auto& l_projContext = GetProjTLSContextHolder();
     l_projContext.init();
     {
-        // If OSRSetPROJSearchPaths() has been called since we created the mutex,
+        // If OSRSetPROJSearchPaths() has been called since we created the context,
         // set the new search paths on the context.
         std::lock_guard<std::mutex> oLock(g_oSearchPathMutex);
         if( l_projContext.searchPathGenerationCounter !=
@@ -129,7 +161,7 @@ PJ_CONTEXT* OSRGetProjTLSContext()
 
 void OSRCleanupTLSContext()
 {
-    g_tls_projContext.deinit();
+    GetProjTLSContextHolder().deinit();
 }
 
 /*! @endcond */

@@ -277,6 +277,7 @@ void PDFDataset::ExploreTree(GDALPDFObject* poObj,
     {
         GDALPDFArray* poArray = poK->GetArray();
         if (poArray->GetLength() > 0 &&
+            poArray->Get(0) &&
             poArray->Get(0)->GetType() == PDFObjectType_Dictionary &&
             poArray->Get(0)->GetDictionary()->Get("K") != nullptr &&
             poArray->Get(0)->GetDictionary()->Get("K")->GetType() == PDFObjectType_Int)
@@ -309,8 +310,14 @@ void PDFDataset::ExploreTree(GDALPDFObject* poObj,
         else
         {
             for(int i=0;i<poArray->GetLength();i++)
-                ExploreTree(poArray->Get(i), aoSetAlreadyVisited,
-                            nRecLevel + 1);
+            {
+                auto poSubObj = poArray->Get(i);
+                if (poSubObj )
+                {
+                    ExploreTree(poSubObj, aoSetAlreadyVisited,
+                                nRecLevel + 1);
+                }
+            }
         }
     }
     else if (poK->GetType() == PDFObjectType_Dictionary)
@@ -504,6 +511,8 @@ static OGRPoint* PDFGetStarCenter(OGRLineString* poLS)
     double dfSqD13 = SQUARE(poLS->getX(1) - poLS->getX(3)) +
                       SQUARE(poLS->getY(1) - poLS->getY(3));
     const double dfSin18divSin126 = 0.38196601125;
+    if( dfSqD02 == 0 )
+        return nullptr;
     int bOK = fabs(dfSqD13 / dfSqD02 - SQUARE(dfSin18divSin126)) < EPSILON;
     for(int i=1;i<10 && bOK;i++)
     {
@@ -1472,7 +1481,13 @@ void PDFDataset::ExploreContents(GDALPDFObject* poObj,
     {
         GDALPDFArray* poArray = poObj->GetArray();
         for(int i=0;i<poArray->GetLength();i++)
-            ExploreContents(poArray->Get(i), poResources);
+        {
+            GDALPDFObject* poSubObj = poArray->Get(i);
+            if( poSubObj )
+            {
+                ExploreContents(poSubObj, poResources);
+            }
+        }
     }
 
     if (poObj->GetType() != PDFObjectType_Dictionary)
@@ -1548,7 +1563,7 @@ void PDFDataset::ExploreContentsNonStructuredInternal(GDALPDFObject* poContents,
         for(int i=0;i<poArray->GetLength();i++)
         {
             GDALPDFObject* poObj = poArray->Get(i);
-            if( poObj->GetType() != PDFObjectType_Dictionary)
+            if( poObj == nullptr || poObj->GetType() != PDFObjectType_Dictionary)
                 break;
             GDALPDFStream* poStream = poObj->GetStream();
             if (!poStream)

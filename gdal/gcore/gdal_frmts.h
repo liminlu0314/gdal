@@ -201,7 +201,11 @@ void CPL_DLL GDALRegister_IGNFHeightASCIIGrid(void);
 void CPL_DLL GDALRegister_TileDB(void);
 void CPL_DLL GDALRegister_DAAS(void);
 void CPL_DLL GDALRegister_COG(void);
+<<<<<<< HEAD
 void CPL_DLL GDALRegister_TFATMBTiles(void);
+=======
+void CPL_DLL GDALRegister_RDB(void);
+>>>>>>> pr/15
 CPL_C_END
 
 #endif /* ndef GDAL_FRMTS_H_INCLUDED */

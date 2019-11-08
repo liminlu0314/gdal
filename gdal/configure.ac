@@ -268,7 +268,11 @@ dnl AC_COMPILER_PIC
 	fi
 	rm -f conftest*
 
+dnl Trick so that LD_SHARED test works with sanitizer flags with clang
+SAVED_CFLAGS=$CFLAGS
+CFLAGS=`echo "$CFLAGS " | sed "s/-fsanitize=undefined //" | sed "s/-fsanitize=address //" | sed "s/-fsanitize=unsigned-integer-overflow //"`
 AC_LD_SHARED
+CFLAGS=$SAVED_CFLAGS
 else
 with_libtool=yes
 fi
@@ -300,7 +304,7 @@ AC_SUBST(ENABLE_UFFD,$ENABLE_UFFD)
 AC_C_BIGENDIAN
 
 dnl Check for 64 bit file API
-AC_HAVE_LONG_LONG
+AC_CHECK_TYPES([long long])
 AC_UNIX_STDIO_64
 
 AC_CHECK_SIZEOF(int)
@@ -1355,7 +1359,7 @@ OGRFORMATS_DISABLED=
 
 AC_DEFUN([INTERNAL_FORMATS],[aaigrid adrg aigrid airsar arg blx bmp bsb cals ceos ceos2 coasp cosar ctg dimap dted e00grid elas envisat ers fit gff gsg gxf hf2 idrisi ignfheightasciigrid ilwis ingr iris iso8211 jaxapalsar jdem kmlsuperoverlay l1b leveller map mrf msgn ngsgeoid nitf northwood pds prf r raw rmf rs2 safe saga sdts sentinel2 sgi sigdem srtmhgt terragen til tsx usgsdem xpm xyz zmap])
 AC_DEFUN([INTERNAL_OPT_FORMATS],[grib ozi pdf rik])
-AC_DEFUN([INTERNAL_DRIVERS],[aeronavfaa arcgen avc bna cad csv dgn dxf edigeo geoconcept georss gml gmt gpsbabel gpx gtm htf jml mvt ntf openair openfilegdb pgdump rec s57 segukooa segy selafin shape sua svg sxf tiger vdv wasp xplane])dnl
+AC_DEFUN([INTERNAL_DRIVERS],[aeronavfaa arcgen avc bna cad csv dgn dxf edigeo flatgeobuf geoconcept georss gml gmt gpsbabel gpx gtm htf jml mvt ntf openair openfilegdb pgdump rec s57 segukooa segy selafin shape sua svg sxf tiger vdv wasp xplane])dnl
 AC_DEFUN([CURL_FORMATS],[eeda plmosaic rda wcs wms wmts daas])dnl
 AC_DEFUN([CURL_DRIVERS],[amigocloud carto cloudant couchdb csw elastic gft ngw plscenes wfs])dnl
 AC_DEFUN([SQLITE_FORMATS],[rasterlite mbtiles])dnl
@@ -5654,6 +5658,44 @@ AC_SUBST(RASDAMAN_INC,    $RASDAMAN_INC)
 AC_SUBST(RASDAMAN_LIB,    $RASDAMAN_LIB)
 
 dnl ---------------------------------------------------------------------------
+dnl RDB support
+dnl ---------------------------------------------------------------------------
+
+AC_ARG_WITH(rdb,[  --with-rdb[=ARG]    Include RDB support (ARG=no, yes or RDB SDK root path)],,)
+
+RDB_SETTING=no
+
+if test "$with_rdb" = "yes" -o "$with_rdb" = "" ; then
+
+  AC_CHECK_LIB(rdb,rdb_library_name,RDB_SETTING=yes,RDB_SETTING=no,)
+
+  if test "$RDB_SETTING" = "yes" ; then
+    LIBS="-lrdb $LIBS"
+  else
+    echo "librdb not found - RDB support disabled"
+  fi
+
+elif test "$with_rdb" != "no" -a "$with_rdb" != ""; then
+
+  AC_CHECK_LIB(rdb,rdb_library_name,RDB_SETTING=yes,RDB_SETTING=no,-L$with_rdb/library -lrdb)
+
+  if test "$RDB_SETTING" = "yes" ; then
+    LIBS="-L$with_rdb/library -lrdb $LIBS"
+    EXTRA_INCLUDES="-I$with_rdb/interface/cpp/ -I$with_rdb/interface/c/ $EXTRA_INCLUDES"
+  else
+    echo "librdb not found - RDB support disabled"
+  fi
+
+fi
+
+AC_SUBST(RDB_SETTING,$RDB_SETTING)
+
+if test "$RDB_SETTING" != "no" ; then
+  OPT_GDAL_FORMATS="rdb $OPT_GDAL_FORMATS"
+fi
+
+
+dnl ---------------------------------------------------------------------------
 dnl Armadillo support
 dnl ---------------------------------------------------------------------------
 
@@ -6009,6 +6051,7 @@ LOC_MSG([  OCI support:               ${HAVE_OCI}])
 LOC_MSG([  GEORASTER support:         ${HAVE_GEORASTER}])
 LOC_MSG([  SDE support:               ${SDE_ENABLED}])
 LOC_MSG([  Rasdaman support:          ${RASDAMAN_ENABLED}])
+LOC_MSG([  RDB support:               ${RDB_SETTING}])
 LOC_MSG([  DODS support:              ${HAVE_DODS}])
 LOC_MSG([  SQLite support:            ${HAVE_SQLITE}])
 LOC_MSG([  PCRE support:              ${HAVE_PCRE}])

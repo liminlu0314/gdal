@@ -366,7 +366,7 @@ static int GRIB2SectJump (VSILFILE *fp,
       }
       return -1;
    }
-   if (VSIFReadL (&sectNum, sizeof (char), 1, fp) != 1) {
+   if (*secLen < 5 || VSIFReadL (&sectNum, sizeof (char), 1, fp) != 1) {
       if (*sect != -1) {
          errSprintf ("ERROR: Ran out of file in Section %d\n", *sect);
       } else {
@@ -1222,9 +1222,11 @@ int GRIB2Inventory (VSILFILE *fp, inventoryType **Inv, uInt4 *LenInv,
       } else
 #endif
       {
+         if( buffLen > UINT_MAX - gribLen )
+             break;
          increment = buffLen + gribLen;
       }
-      if( increment < buffLen || increment > (VSI_L_OFFSET_MAX - offset) )
+      if( /* increment < buffLen || */ increment > (VSI_L_OFFSET_MAX - offset) )
           break;
       offset += increment;
       }

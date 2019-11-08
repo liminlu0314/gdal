@@ -24,7 +24,7 @@ Synopsis
                    [-s_srs srs_def]  [-pyramidOnly]
                    [-r {near/bilinear/cubic/cubicspline/lanczos}]
                    -levels numberoflevels
-                   [-useDirForEachRow]
+                   [-useDirForEachRow] [-resume]
                    -targetDir TileDirectory input_files
 
 Description
@@ -60,7 +60,7 @@ If your number of input tiles exhausts the command line buffer, use the general
 
     Overlap in pixels between consecutive tiles. If not specified, 0 is the default
 
-    ..versionadded:: 2.2
+    .. versionadded:: 2.2
 
 .. option:: -levels <numberOfLevels>
 
@@ -116,6 +116,10 @@ If your number of input tiles exhausts the command line buffer, use the general
     0...n, depending of how many tile rows are needed for each level. Finally, a directory contains
     only the tiles for one row for a specific level. For large images a performance improvement
     of a factor N could be achieved.
+
+.. option:: -resume
+
+    Resume mode. Generate only missing files.
 
 .. note::
 

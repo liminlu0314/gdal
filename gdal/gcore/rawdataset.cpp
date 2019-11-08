@@ -47,6 +47,7 @@
 #include "cpl_string.h"
 #include "cpl_virtualmem.h"
 #include "cpl_vsi.h"
+#include "cpl_safemaths.hpp"
 #include "gdal.h"
 #include "gdal_priv.h"
 
@@ -71,6 +72,8 @@ RawRasterBand::RawRasterBand( GDALDataset *poDSIn, int nBandIn,
     poDS = poDSIn;
     nBand = nBandIn;
     eDataType = eDataTypeIn;
+    nRasterXSize = poDSIn->GetRasterXSize();
+    nRasterYSize = poDSIn->GetRasterYSize();
 
     CPLDebug("GDALRaw",
              "RawRasterBand(%p,%d,%p,\n"
@@ -148,6 +151,60 @@ void RawRasterBand::Initialize()
     papszCategoryNames = nullptr;
 
     bDirty = FALSE;
+
+    vsi_l_offset nSmallestOffset = nImgOffset;
+    vsi_l_offset nLargestOffset = nImgOffset;
+    if( nLineOffset < 0 )
+    {
+        if( static_cast<vsi_l_offset>(-nLineOffset) * (nRasterYSize - 1) > nImgOffset )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                    "Inconsistent nLineOffset, nRasterYSize and nImgOffset");
+            pLineBuffer = nullptr;
+            return;
+        }
+        nSmallestOffset -= static_cast<vsi_l_offset>(-nLineOffset) * (nRasterYSize - 1);
+    }
+    else
+    {
+        if( nImgOffset > std::numeric_limits<vsi_l_offset>::max() -
+                    static_cast<vsi_l_offset>(nLineOffset) * (nRasterYSize - 1) )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                    "Inconsistent nLineOffset, nRasterYSize and nImgOffset");
+            pLineBuffer = nullptr;
+            return;
+        }
+        nLargestOffset += static_cast<vsi_l_offset>(nLineOffset) * (nRasterYSize - 1);
+    }
+    if( nPixelOffset < 0 )
+    {
+        if( static_cast<vsi_l_offset>(-nPixelOffset) * (nRasterXSize - 1) > nSmallestOffset )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                    "Inconsistent nPixelOffset, nRasterXSize and nImgOffset");
+            pLineBuffer = nullptr;
+            return;
+        }
+    }
+    else
+    {
+        if( nLargestOffset > std::numeric_limits<vsi_l_offset>::max() -
+                    static_cast<vsi_l_offset>(nPixelOffset) * (nRasterXSize - 1) )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                    "Inconsistent nPixelOffset, nRasterXSize and nImgOffset");
+            pLineBuffer = nullptr;
+            return;
+        }
+        nLargestOffset += static_cast<vsi_l_offset>(nPixelOffset) * (nRasterXSize - 1);
+    }
+    if( nLargestOffset > static_cast<vsi_l_offset>(GINTBIG_MAX) )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "Too big largest offset");
+        pLineBuffer = nullptr;
+        return;
+    }
 
     // Allocate working scanline.
     nLoadedScanline = -1;
@@ -259,14 +316,21 @@ CPLErr RawRasterBand::AccessLine( int iLine )
 
     // Figure out where to start reading.
     // Write formulas such that unsigned int overflow doesn't occur
-    const GUIntBig nPixelOffsetToSubtract =
-        nPixelOffset >= 0
-        ? 0 : static_cast<GUIntBig>(-static_cast<GIntBig>(nPixelOffset)) * (nBlockXSize - 1);
-    const vsi_l_offset nReadStart = static_cast<vsi_l_offset>(
-        (nLineOffset >= 0 ?
-            nImgOffset + static_cast<GUIntBig>(nLineOffset) * iLine :
-            nImgOffset - static_cast<GUIntBig>(-static_cast<GIntBig>(nLineOffset)) * iLine )
-        - nPixelOffsetToSubtract);
+    vsi_l_offset nReadStart = nImgOffset;
+    if( nLineOffset >= 0 )
+    {
+        nReadStart += static_cast<GUIntBig>(nLineOffset) * iLine;
+    }
+    else
+    {
+        nReadStart -= static_cast<GUIntBig>(-static_cast<GIntBig>(nLineOffset)) * iLine;
+    }
+    if( nPixelOffset < 0 )
+    {
+        const GUIntBig nPixelOffsetToSubtract =
+            static_cast<GUIntBig>(-static_cast<GIntBig>(nPixelOffset)) * (nBlockXSize - 1);
+        nReadStart -= nPixelOffsetToSubtract;
+    }
 
     // Seek to the correct line.
     if( Seek(nReadStart, SEEK_SET) == -1 )
@@ -632,9 +696,12 @@ CPLErr RawRasterBand::IRasterIO( GDALRWFlag eRWFlag,
              && nPixelSpace == nBufDataSize
              && nLineSpace == nPixelSpace * nXSize )
         {
-            const vsi_l_offset nOffset =
-                nImgOffset + static_cast<vsi_l_offset>(nYOff) * nLineOffset +
-                nXOff;
+            vsi_l_offset nOffset = nImgOffset;
+            if( nLineOffset >= 0 )
+                nOffset += nYOff * nLineOffset;
+            else
+                nOffset -= nYOff * static_cast<vsi_l_offset>(-nLineOffset);
+
             const size_t nBytesToRead =
                 static_cast<size_t>(nXSize) * nYSize * nBandDataSize;
             if ( AccessBlock(nOffset, nBytesToRead, pData) != CE_None )
@@ -661,12 +728,18 @@ CPLErr RawRasterBand::IRasterIO( GDALRWFlag eRWFlag,
 
             for ( int iLine = 0; iLine < nBufYSize; iLine++ )
             {
-                const vsi_l_offset nOffset =
-                    nImgOffset +
-                    ((static_cast<vsi_l_offset>(nYOff) +
-                      static_cast<vsi_l_offset>(iLine * dfSrcYInc)) *
-                     nLineOffset) +
-                    nXOff * nPixelOffset;
+                const vsi_l_offset nLine =
+                    static_cast<vsi_l_offset>(nYOff) +
+                      static_cast<vsi_l_offset>(iLine * dfSrcYInc);
+                vsi_l_offset nOffset = nImgOffset;
+                if( nLineOffset >= 0 )
+                    nOffset += nLine * nLineOffset;
+                else
+                    nOffset -= nLine * static_cast<vsi_l_offset>(-nLineOffset);
+                if( nPixelOffset >= 0 )
+                    nOffset += nXOff * nPixelOffset;
+                else
+                    nOffset -= nXOff * static_cast<vsi_l_offset>(-nPixelOffset);
                 if ( AccessBlock(nOffset,
                                  nBytesToRW, pabyData) != CE_None )
                 {
@@ -745,9 +818,12 @@ CPLErr RawRasterBand::IRasterIO( GDALRWFlag eRWFlag,
             }
 
             // Seek to the correct block.
-            const vsi_l_offset nOffset =
-                nImgOffset + static_cast<vsi_l_offset>(nYOff) * nLineOffset +
-                nXOff;
+            vsi_l_offset nOffset = nImgOffset;
+            if( nLineOffset >= 0 )
+                nOffset += nYOff * nLineOffset;
+            else
+                nOffset -= nYOff * static_cast<vsi_l_offset>(-nLineOffset);
+
             if( Seek(nOffset, SEEK_SET) == -1 )
             {
                 CPLError(CE_Failure, CPLE_FileIO,
@@ -805,17 +881,23 @@ CPLErr RawRasterBand::IRasterIO( GDALRWFlag eRWFlag,
 
             for ( int iLine = 0; iLine < nBufYSize; iLine++ )
             {
-                const vsi_l_offset nBlockOff =
-                    nImgOffset +
-                    (static_cast<vsi_l_offset>(nYOff) +
-                     static_cast<vsi_l_offset>(iLine * dfSrcYInc)) *
-                        nLineOffset +
-                    static_cast<vsi_l_offset>(nXOff) * nPixelOffset;
+                const vsi_l_offset nLine =
+                    static_cast<vsi_l_offset>(nYOff) +
+                      static_cast<vsi_l_offset>(iLine * dfSrcYInc);
+                vsi_l_offset nOffset = nImgOffset;
+                if( nLineOffset >= 0 )
+                    nOffset += nLine * nLineOffset;
+                else
+                    nOffset -= nLine * static_cast<vsi_l_offset>(-nLineOffset);
+                if( nPixelOffset >= 0 )
+                    nOffset += nXOff * nPixelOffset;
+                else
+                    nOffset -= nXOff * static_cast<vsi_l_offset>(-nPixelOffset);
 
                 // If the data for this band is completely contiguous we don't
                 // have to worry about pre-reading from disk.
                 if( nPixelOffset > nBandDataSize )
-                    AccessBlock(nBlockOff, nBytesToRW, pabyData);
+                    AccessBlock(nOffset, nBytesToRW, pabyData);
 
                 // Copy data from user block buffer to disk buffer and
                 // subsample, if needed.
@@ -864,11 +946,11 @@ CPLErr RawRasterBand::IRasterIO( GDALRWFlag eRWFlag,
                 }
 
                 // Seek to the right line in block.
-                if( Seek(nBlockOff, SEEK_SET) == -1 )
+                if( Seek(nOffset, SEEK_SET) == -1 )
                 {
                     CPLError(CE_Failure, CPLE_FileIO,
                              "Failed to seek to " CPL_FRMT_GUIB " to read.",
-                             nBlockOff);
+                             nOffset);
                     CPLFree(pabyData);
                     return CE_Failure;
                 }
@@ -1209,10 +1291,20 @@ bool RAWDatasetCheckMemoryUsage(int nXSize, int nYSize, int nBands,
          (pszCheck && CPLTestBool(pszCheck))) &&
         !(pszCheck && !CPLTestBool(pszCheck)) )
     {
-        vsi_l_offset nExpectedFileSize =
-            nHeaderSize + nBandOffset * (nBands - 1) +
-            (nYSize-1) * static_cast<vsi_l_offset>(nLineOffset) +
-            (nXSize-1) * static_cast<vsi_l_offset>(nPixelOffset);
+        vsi_l_offset nExpectedFileSize;
+        try
+        {
+            nExpectedFileSize =
+                (CPLSM(static_cast<GUInt64>(nHeaderSize)) +
+                CPLSM(static_cast<GUInt64>(nBandOffset)) * CPLSM(static_cast<GUInt64>(nBands - 1)) +
+                (nLineOffset >= 0 ? CPLSM(static_cast<GUInt64>(nYSize-1)) * CPLSM(static_cast<GUInt64>(nLineOffset)) : CPLSM(static_cast<GUInt64>(0))) +
+                (nPixelOffset >= 0 ? CPLSM(static_cast<GUInt64>(nXSize-1)) * CPLSM(static_cast<GUInt64>(nPixelOffset)) : CPLSM(static_cast<GUInt64>(0)))).v();
+        }
+        catch( ... )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined, "Image file is too small");
+            return false;
+        }
         CPL_IGNORE_RET_VAL( VSIFSeekL(fp, 0, SEEK_END) );
         vsi_l_offset nFileSize = VSIFTellL(fp);
         // Do not strictly compare against nExpectedFileSize, but use an arbitrary

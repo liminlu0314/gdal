@@ -519,6 +519,10 @@ public:
   }
 #endif
 
+  OGRErr SetDataAxisToSRSAxisMapping(int nList, int* pList) {
+    return OSRSetDataAxisToSRSAxisMapping(self, nList, pList);
+  }
+
   OGRErr SetUTM( int zone, int north =1 ) {
     return OSRSetUTM( self, zone, north );
   }
@@ -1015,6 +1019,10 @@ public:
 
   OGRErr ExportToPrettyWkt( char **argout, int simplify = 0 ) {
     return OSRExportToPrettyWkt( self, argout, simplify );
+  }
+
+  OGRErr ExportToPROJJSON( char **argout, char **options = NULL ) {
+    return OSRExportToPROJJSON( self, argout, options );
   }
 
   OGRErr ExportToProj4( char **argout ) {

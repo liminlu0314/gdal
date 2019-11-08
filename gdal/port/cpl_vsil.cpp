@@ -40,6 +40,7 @@
 #endif
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -779,7 +780,8 @@ int VSIStatExL( const char * pszFilename, VSIStatBufL *psStatBuf, int nFlags )
     char szAltPath[4] = { '\0' };
 
     // Enable to work on "C:" as if it were "C:\".
-    if( strlen(pszFilename) == 2 && pszFilename[1] == ':' )
+    if( pszFilename[0] != '\0' && pszFilename[1] == ':' &&
+        pszFilename[2] == '\0' )
     {
         szAltPath[0] = pszFilename[0];
         szAltPath[1] = pszFilename[1];
@@ -1090,6 +1092,7 @@ bool VSIFilesystemHandler::Sync( const char* pszSource, const char* pszTarget,
                     CPLFormFilename(osSourceWithoutSlash, *iter, nullptr) );
                 CPLString osSubTarget(
                     CPLFormFilename(osTargetDir, *iter, nullptr) );
+                // coverity[divide_by_zero]
                 void* pScaledProgress = GDALCreateScaledProgress(
                     double(iFile) / nFileCount, double(iFile + 1) / nFileCount,
                     pProgressFunc, pProgressData);
@@ -2156,6 +2159,8 @@ int VSIIngestFile( VSILFILE* fp,
         // VSIMalloc could allocate. Catch it here.
         if( nDataLen != static_cast<vsi_l_offset>(static_cast<size_t>(nDataLen))
             || nDataLen + 1 < nDataLen
+            // opening a directory returns nDataLen = INT_MAX (on 32bit) or INT64_MAX (on 64bit)
+            || nDataLen + 1 > std::numeric_limits<size_t>::max() / 2
             || (nMaxSize >= 0 &&
                 nDataLen > static_cast<vsi_l_offset>(nMaxSize)) )
         {
@@ -2204,6 +2209,63 @@ int VSIIngestFile( VSILFILE* fp,
     if( bFreeFP )
         CPL_IGNORE_RET_VAL(VSIFCloseL( fp ));
     return TRUE;
+}
+
+
+/************************************************************************/
+/*                         VSIOverwriteFile()                           */
+/************************************************************************/
+
+/**
+ * \brief Overwrite an existing file with content from another one
+ *
+ * @param fpTarget file handle opened with VSIFOpenL() with "rb+" flag.
+ * @param pszSourceFilename source filename
+ *
+ * @return TRUE in case of success.
+ *
+ * @since GDAL 3.1
+ */
+
+int VSIOverwriteFile( VSILFILE* fpTarget, const char* pszSourceFilename )
+{
+    VSILFILE* fpSource = VSIFOpenL(pszSourceFilename, "rb");
+    if( fpSource == nullptr )
+    {
+        CPLError(CE_Failure, CPLE_FileIO,
+                 "Cannot open %s", pszSourceFilename);
+        return false;
+    }
+
+    const size_t nBufferSize = 4096;
+    void* pBuffer = CPLMalloc(nBufferSize);
+    VSIFSeekL( fpTarget, 0, SEEK_SET );
+    bool bRet = true;
+    while( true )
+    {
+        size_t nRead = VSIFReadL( pBuffer, 1, nBufferSize, fpSource );
+        size_t nWritten = VSIFWriteL( pBuffer, 1, nRead, fpTarget );
+        if( nWritten != nRead )
+        {
+            bRet = false;
+            break;
+        }
+        if( nRead < nBufferSize )
+            break;
+    }
+
+    if( bRet )
+    {
+        bRet = VSIFTruncateL( fpTarget, VSIFTellL(fpTarget) ) == 0;
+        if( !bRet )
+        {
+            CPLError(CE_Failure, CPLE_FileIO, "Truncation failed");
+        }
+    }
+
+    CPLFree(pBuffer);
+    VSIFCloseL(fpSource);
+    return bRet;
 }
 
 /************************************************************************/

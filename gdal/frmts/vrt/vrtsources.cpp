@@ -1378,7 +1378,7 @@ VRTSimpleSource::RasterIO( GDALDataType eBandDataType,
                                                     nBandDTSize * nOutXSize,
                                   eBandDataType, nBandDTSize,
                                   pabyOut +
-                                    static_cast<size_t>(iY) * nLineSpace,
+                                    static_cast<GPtrDiff_t>(iY * nLineSpace),
                                   eBufType,
                                   static_cast<int>(nPixelSpace),
                                   nOutXSize);
@@ -1745,8 +1745,8 @@ CPLErr VRTSimpleSource::DatasetRasterIO(
                                         static_cast<size_t>(iY) * nBandDTSize * nOutXSize,
                                     eBandDataType, nBandDTSize,
                                     pabyOut +
-                                        static_cast<size_t>(iY) * nLineSpace +
-                                        static_cast<size_t>(iBand) * nBandSpace,
+                                        static_cast<GPtrDiff_t>(iY * nLineSpace +
+                                                                iBand * nBandSpace),
                                     eBufType, static_cast<int>(nPixelSpace),
                                     nOutXSize);
                     }
@@ -2179,25 +2179,8 @@ CPLXMLNode *VRTComplexSource::SerializeToXML( const char *pszVRTPath )
 
     if( m_bNoDataSet )
     {
-        if( CPLIsNan(m_dfNoDataValue) )
-            CPLSetXMLValue( psSrc, "NODATA", "nan");
-        else if( m_poRasterBand->GetRasterDataType() == GDT_Float32 &&
-                 m_dfNoDataValue == -std::numeric_limits<float>::max() )
-        {
-            // To avoid rounding out of the range of float
-            CPLSetXMLValue( psSrc, "NODATA", "-3.4028234663852886e+38");
-        }
-        else if( m_poRasterBand->GetRasterDataType() == GDT_Float32 &&
-                 m_dfNoDataValue == std::numeric_limits<float>::max() )
-        {
-            // To avoid rounding out of the range of float
-            CPLSetXMLValue( psSrc, "NODATA", "3.4028234663852886e+38");
-        }
-        else
-        {
-            CPLSetXMLValue( psSrc, "NODATA",
-                            CPLSPrintf("%.16g", m_dfNoDataValue) );
-        }
+        CPLSetXMLValue( psSrc, "NODATA", VRTSerializeNoData(
+            m_dfNoDataValue, m_poRasterBand->GetRasterDataType(), 16).c_str());
     }
 
     switch( m_eScalingType )

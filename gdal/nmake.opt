@@ -231,9 +231,9 @@ INCLUDE_OGR_FRMTS = YES
 INCLUDE_GNM_FRMTS = YES
 !ENDIF
 
-# To be enabled defined to point to setargv.obj from the Visual C++ directory,
+# To be enabled defined to point to wsetargv.obj from the Visual C++ directory,
 # when you want the utility programs to be able to expand wildcards. 
-#SETARGV =	"D:\Software\VStudio\VC98\lib\setargv.obj"
+#SETARGV =	"D:\Software\VStudio\VC98\lib\wsetargv.obj"
 
 # Uncomment to build with libiconv library to support extended character
 # recoding capabilities. GDAL's internal stub implementation supports
@@ -701,6 +701,11 @@ GEOS_LIB     = $(GEOS_DIR)/lib/geos_c.lib
 #TILEDB_CFLAGS = -IC:/install-tiledb/dist/include
 #TILEDB_LIBS = C:/install-tiledb/dist/lib/libtiledb.lib
 
+# Uncomment for RDB support
+#RDB_ENABLED = YES
+#RDB_CFLAGS = -IC:\rdb\rdblib-2.2.0-x86_64-windows\interface\cpp -IC:\rdb\rdblib-2.2.0-x86_64-windows\interface\c
+#RDB_LIB = C:\rdb\rdblib-2.2.0-x86_64-windows\library\rdblib.lib
+
 # Uncomment for WEBP support
 #WEBP_ENABLED = YES
 #WEBP_CFLAGS = -IE:/libwebp-0.1-windows/dev/Include
@@ -1035,4 +1040,9 @@ EXTERNAL_LIBS =	$(OGDILIB) $(XERCES_LIB) $(EXPAT_LIB) $(OCI_LIB) $(PG_LIB) \
 	$(MRSID_LIDAR_LIB) $(LIBKML_LIBS) $(SOSI_LIBS) $(PDF_LIB_LINK) $(LZMA_LIBS) $(ZSTD_LIBS) \
 	$(LIBICONV_LIBRARY) $(WEBP_LIBS) $(TILEDB_LIBS) $(FGDB_LIB_LINK) $(FREEXL_LIBS) $(GTA_LIBS) \
 	$(INGRES_LIB) $(LIBXML2_LIB) $(PCRE_LIB) $(MONGODB_LIB_LINK) $(MONGODBV3_LIB_LINK) $(CRYPTOPP_LIB) $(OPENSSL_LIB) $(CHARLS_LIB) ws2_32.lib \
+<<<<<<< HEAD
     $(SQLNCLI_LIB) $(PG_LIB_LINK) $(OPENCL_LIB) kernel32.lib psapi.lib
+=======
+	$(RDB_LIB) \
+    kernel32.lib psapi.lib
+>>>>>>> pr/15

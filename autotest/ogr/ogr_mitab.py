@@ -1476,13 +1476,13 @@ def test_ogr_mitab_34():
     lyr = ds.GetLayer(0)
     f = lyr.GetNextFeature()
     geom = f.GetGeometryRef()
-    assert abs(geom.GetX(0) - -1000) <= 1e-2 and abs(geom.GetY(0) - 3000) <= 1e-2
+    assert geom.GetX(0) == pytest.approx(-1000, abs=1e-2) and geom.GetY(0) == pytest.approx(3000, abs=1e-2)
     for i in range(999):
-        assert abs(geom.GetX(i + 1) - (i + 1)) <= 1e-2 and abs(geom.GetY(i + 1) - (i + 1)) <= 1e-2
+        assert geom.GetX(i + 1) == pytest.approx((i + 1), abs=1e-2) and geom.GetY(i + 1) == pytest.approx((i + 1), abs=1e-2)
     f = lyr.GetNextFeature()
     geom = f.GetGeometryRef()
     for i in range(1000):
-        assert abs(geom.GetX(i) - (i)) <= 1e-2 and abs(geom.GetY(i) - (i)) <= 1e-2
+        assert geom.GetX(i) == pytest.approx((i), abs=1e-2) and geom.GetY(i) == pytest.approx((i), abs=1e-2)
     ds = None
 
     ogr.GetDriverByName('MapInfo File').DeleteDataSource(filename)
@@ -2382,6 +2382,26 @@ def test_ogr_mitab_too_large_value_for_decimal_field():
     ds = None
 
     ogr.GetDriverByName('MapInfo File').DeleteDataSource(filename)
+
+
+###############################################################################
+# Check custom datum/spheroid parameters export
+
+def test_ogr_mitab_custom_datum_export():
+
+    sr = osr.SpatialReference()
+    sr.SetGeogCS('Custom', 'Custom', 'Sphere', 6370997.0, 0.0)
+    sr.SetTOWGS84(1, 2, 3, 4, 5, 6, 7)
+    proj =  sr.ExportToMICoordSys()
+    assert proj == 'Earth Projection 1, 9999, 12, 1, 2, 3, -4, -5, -6, -7, 0'
+
+    sr = osr.SpatialReference()
+    sr.SetGeogCS('Custom', 'Custom', 'NWL-9D or WGS-66', 6378145.0, 298.25)
+    sr.SetTOWGS84(1, 2, 3, 4, 5, 6, 7)
+    sr.SetUTM(33)
+    proj =  sr.ExportToMICoordSys()
+    assert proj == 'Earth Projection 8, 9999, 42, 1, 2, 3, -4, -5, -6, -7, 0, "m", 15, 0, 0.9996, 500000, 0'
+
 
 ###############################################################################
 #

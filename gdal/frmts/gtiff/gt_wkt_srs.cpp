@@ -54,6 +54,7 @@
 #include "ogr_core.h"
 #include "ogr_spatialref.h"
 #include "ogr_srs_api.h"
+#include "ogr_proj_p.h"
 #include "tiff.h"
 #include "tiffio.h"
 #include "tifvsi.h"
@@ -314,6 +315,10 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 
     LibgeotiffOneTimeInit();
 
+#if LIBGEOTIFF_VERSION >= 1600
+    void* projContext = GTIFGetPROJContext(hGTIF, FALSE, nullptr);
+#endif
+
 /* -------------------------------------------------------------------- */
 /*  Handle non-standard coordinate systems where GTModelTypeGeoKey      */
 /*  is not defined, but ProjectedCSTypeGeoKey is defined (ticket #3019) */
@@ -379,7 +384,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
                 oSRS.SetLocalCS( szPCSName );
 
                 // Handle units
-                GTIFGetUOMLengthInfo( psDefn->UOMLength, &pszUnitsName, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+                GTIFGetUOMLengthInfoEx( projContext,
+#else
+                GTIFGetUOMLengthInfo(
+#endif
+                    psDefn->UOMLength, &pszUnitsName, nullptr );
 
                 if( pszUnitsName != nullptr && psDefn->UOMLength != KvUserDefined )
                 {
@@ -418,7 +428,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 
         char *pszUnitsName = nullptr;
 
-        GTIFGetUOMLengthInfo( psDefn->UOMLength, &pszUnitsName, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetUOMLengthInfoEx( projContext,
+#else
+        GTIFGetUOMLengthInfo(
+#endif
+            psDefn->UOMLength, &pszUnitsName, nullptr );
 
         if( pszUnitsName != nullptr && psDefn->UOMLength != KvUserDefined )
         {
@@ -501,7 +516,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
         {
             char *pszPCSName = nullptr;
 
-            GTIFGetPCSInfo( psDefn->PCS, &pszPCSName, nullptr, nullptr, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+            GTIFGetPCSInfoEx( projContext,
+#else
+            GTIFGetPCSInfo(
+#endif
+                psDefn->PCS, &pszPCSName, nullptr, nullptr, nullptr );
 
             oSRS.SetProjCS( pszPCSName ? pszPCSName : "unnamed" );
             if ( pszPCSName )
@@ -640,7 +660,13 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     char *pszAngularUnits = nullptr;
     char szGCSName[512] = { '\0' };
 
-    if( !GTIFGetGCSInfo( psDefn->GCS, &pszGeogName, nullptr, nullptr, nullptr )
+    if( !
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetGCSInfoEx( projContext,
+#else
+        GTIFGetGCSInfo(
+#endif
+            psDefn->GCS, &pszGeogName, nullptr, nullptr, nullptr )
         && GDALGTIFKeyGetASCII( hGTIF, GeogCitationGeoKey, szGCSName, 0,
                        sizeof(szGCSName)) )
     {
@@ -657,7 +683,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 
     if( !pszDatumName )
     {
-        GTIFGetDatumInfo( psDefn->Datum, &pszDatumName, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetDatumInfoEx( projContext,
+#else
+        GTIFGetDatumInfo(
+#endif
+            psDefn->Datum, &pszDatumName, nullptr );
         GTIFToCPLRecycleString( &pszDatumName );
     }
 
@@ -665,7 +696,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     double dfInvFlattening = 0.0;
     if( !pszSpheroidName )
     {
-        GTIFGetEllipsoidInfo( psDefn->Ellipsoid, &pszSpheroidName, nullptr, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetEllipsoidInfoEx( projContext,
+#else
+        GTIFGetEllipsoidInfo(
+#endif
+            psDefn->Ellipsoid, &pszSpheroidName, nullptr, nullptr );
         GTIFToCPLRecycleString( &pszSpheroidName );
     }
     else
@@ -677,7 +713,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     }
     if( !pszPMName )
     {
-        GTIFGetPMInfo( psDefn->PM, &pszPMName, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetPMInfoEx( projContext,
+#else
+        GTIFGetPMInfo(
+#endif
+            psDefn->PM, &pszPMName, nullptr );
         GTIFToCPLRecycleString( &pszPMName );
     }
     else
@@ -689,7 +730,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     bool aUnitGot = false;
     if( !pszAngularUnits )
     {
-        GTIFGetUOMAngleInfo( psDefn->UOMAngle, &pszAngularUnits, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetUOMAngleInfoEx( projContext,
+#else
+        GTIFGetUOMAngleInfo(
+#endif
+            psDefn->UOMAngle, &pszAngularUnits, nullptr );
         if( pszAngularUnits == nullptr )
             pszAngularUnits = CPLStrdup("unknown");
         else
@@ -806,7 +852,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     {
         char *pszUnitsName = nullptr;
 
-        GTIFGetUOMLengthInfo( psDefn->UOMLength, &pszUnitsName, nullptr );
+#if LIBGEOTIFF_VERSION >= 1600
+        GTIFGetUOMLengthInfoEx( projContext,
+#else
+        GTIFGetUOMLengthInfo(
+#endif
+            psDefn->UOMLength, &pszUnitsName, nullptr );
 
         if( pszUnitsName != nullptr && psDefn->UOMLength != KvUserDefined )
         {
@@ -1699,8 +1750,6 @@ int GTIFSetFromOGISDefnEx( GTIF * psGTIF, const char *pszOGCWKT,
         int bNorth = 0;
         const int nZone = poSRS->GetUTMZone( &bNorth );
 
-        int nProjection = 0;
-
         if( nDatum == Datum_North_American_Datum_1983 && nZone >= 3
             && nZone <= 22 && bNorth && nUOMLengthCode == 9001 )
         {
@@ -1726,11 +1775,7 @@ int GTIFSetFromOGISDefnEx( GTIF * psGTIF, const char *pszOGCWKT,
         }
         else
         {
-            if( bNorth )
-                nProjection = 16000 + nZone;
-            else
-                nProjection = 16100 + nZone;
-
+            const int nProjection = nZone + (bNorth ? 16000 : 16100);
             GTIFKeySet(psGTIF, ProjectedCSTypeGeoKey, TYPE_SHORT, 1,
                        KvUserDefined );
 

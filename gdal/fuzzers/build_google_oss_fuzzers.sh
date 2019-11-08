@@ -19,6 +19,10 @@ if [ "$CXX" == "" ]; then
     exit 1
 fi
 
+if [ "$LIB_FUZZING_ENGINE" = "" ]; then
+    export LIB_FUZZING_ENGINE=-lFuzzingEngine
+fi
+
 SRC_DIR=$(dirname $0)/..
 
 build_fuzzer()
@@ -31,11 +35,11 @@ build_fuzzer()
     if test -d $SRC/install/lib; then
         $CXX $CXXFLAGS -std=c++11 -I$SRC_DIR/port -I$SRC_DIR/gcore -I$SRC_DIR/alg -I$SRC_DIR/apps -I$SRC_DIR/ogr -I$SRC_DIR/ogr/ogrsf_frmts -I$SRC_DIR/ogr/ogrsf_frmts/sqlite \
             $sourceFilename "$@" -o $OUT/$fuzzerName \
-            -lFuzzingEngine $SRC_DIR/libgdal.a $EXTRA_LIBS $SRC/install/lib/*.a
+            $LIB_FUZZING_ENGINE $SRC_DIR/libgdal.a $EXTRA_LIBS $SRC/install/lib/*.a
     else
         $CXX $CXXFLAGS -std=c++11 -I$SRC_DIR/port -I$SRC_DIR/gcore -I$SRC_DIR/alg -I$SRC_DIR/apps -I$SRC_DIR/ogr -I$SRC_DIR/ogr/ogrsf_frmts -I$SRC_DIR/ogr/ogrsf_frmts/sqlite \
             $sourceFilename "$@" -o $OUT/$fuzzerName \
-            -lFuzzingEngine $SRC_DIR/libgdal.a $EXTRA_LIBS
+            $LIB_FUZZING_ENGINE $SRC_DIR/libgdal.a $EXTRA_LIBS
     fi
 }
 
@@ -83,6 +87,7 @@ build_ogr_specialized_fuzzer ods RegisterOGRODS "/vsimem/test.ods" "/vsitar/{/vs
 build_ogr_specialized_fuzzer avce00 RegisterOGRAVCE00 "/vsimem/test.e00" "/vsimem/test.e00"
 build_ogr_specialized_fuzzer avcbin RegisterOGRAVCBin "/vsimem/test.tar" "/vsitar/{/vsimem/test.tar}/testavc"
 build_ogr_specialized_fuzzer gml RegisterOGRGML "/vsimem/test.tar" "/vsitar//vsimem/test.tar/test.gml"
+build_ogr_specialized_fuzzer fgb RegisterOGRFlatGeobuf "/vsimem/test.fgb" "/vsimem/test.fgb"
 build_fuzzer cad_fuzzer $(dirname $0)/ogr_fuzzer.cpp -DREGISTER_FUNC=RegisterOGRCAD
 build_fuzzer rec_fuzzer $(dirname $0)/ogr_fuzzer.cpp -DREGISTER_FUNC=RegisterOGRREC -DUSE_FILESYSTEM -DEXTENSION="\"rec\""
 

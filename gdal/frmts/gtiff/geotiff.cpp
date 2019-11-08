@@ -67,6 +67,7 @@
 #include "cpl_config.h"
 #include "cpl_conv.h"
 #include "cpl_error.h"
+#include "cpl_error_internal.h"
 #include "cpl_mem_cache.h"
 #include "cpl_minixml.h"
 #include "cpl_multiproc.h"
@@ -1140,7 +1141,7 @@ void GTIFFSetJpegTablesMode( GDALDatasetH hGTIFFDS, int nJpegTablesMode )
 /* ==================================================================== */
 /************************************************************************/
 
-class GTiffRasterBand : public GDALPamRasterBand
+class GTiffRasterBand CPL_NON_FINAL: public GDALPamRasterBand
 {
     CPL_DISALLOW_COPY_ASSIGN(GTiffRasterBand)
 
@@ -6412,7 +6413,7 @@ GDALColorInterp GTiffRGBABand::GetColorInterpretation()
 /* ==================================================================== */
 /************************************************************************/
 
-class GTiffOddBitsBand : public GTiffRasterBand
+class GTiffOddBitsBand CPL_NON_FINAL: public GTiffRasterBand
 {
     friend class GTiffDataset;
   public:
@@ -7517,33 +7518,6 @@ int GTiffSplitBitmapBand::IGetDataCoverageStatus( int , int ,
 }
 
 /************************************************************************/
-/*                            GTIFFErrorHandler()                       */
-/************************************************************************/
-
-namespace {
-class GTIFFErrorStruct final
-{
-  public:
-    CPLErr type;
-    CPLErrorNum no;
-    CPLString msg{};
-
-    GTIFFErrorStruct() : type(CE_None), no(CPLE_None) {}
-    GTIFFErrorStruct(CPLErr eErrIn, CPLErrorNum noIn, const char* msgIn) :
-        type(eErrIn), no(noIn), msg(msgIn) {}
-};
-}
-
-static void CPL_STDCALL GTIFFErrorHandler( CPLErr eErr, CPLErrorNum no,
-                                           const char* msg )
-{
-    std::vector<GTIFFErrorStruct>* paoErrors =
-        static_cast<std::vector<GTIFFErrorStruct> *>(
-            CPLGetErrorHandlerUserData());
-    paoErrors->push_back(GTIFFErrorStruct(eErr, no, msg));
-}
-
-/************************************************************************/
 /*                             IReadBlock()                             */
 /************************************************************************/
 
@@ -7577,11 +7551,11 @@ CPLErr GTiffSplitBitmapBand::IReadBlock( int /* nBlockXOff */, int nBlockYOff,
     {
         ++m_poGDS->m_nLoadedBlock;
 
-        std::vector<GTIFFErrorStruct> aoErrors;
-        CPLPushErrorHandlerEx(GTIFFErrorHandler, &aoErrors);
+        std::vector<CPLErrorHandlerAccumulatorStruct> aoErrors;
+        CPLInstallErrorHandlerAccumulator(aoErrors);
         int nRet = TIFFReadScanline( m_poGDS->m_hTIFF, m_poGDS->m_pabyBlockBuf,
                                      m_poGDS->m_nLoadedBlock, 0 );
-        CPLPopErrorHandler();
+        CPLUninstallErrorHandlerAccumulator();
 
         for( size_t iError = 0; iError < aoErrors.size(); ++iError )
         {
@@ -9255,14 +9229,14 @@ bool GTiffDataset::SubmitCompressionJob( int nStripOrTile, GByte* pabyData,
     auto poTP = m_poBaseDS ?
         m_poBaseDS->m_poCompressThreadPool : m_poCompressThreadPool;
 
-    if( !( poTP != nullptr &&
-           (m_nCompression == COMPRESSION_ADOBE_DEFLATE ||
+    if( poTP == nullptr ||
+          !(m_nCompression == COMPRESSION_ADOBE_DEFLATE ||
             m_nCompression == COMPRESSION_LZW ||
             m_nCompression == COMPRESSION_PACKBITS ||
             m_nCompression == COMPRESSION_LZMA ||
             m_nCompression == COMPRESSION_ZSTD ||
             m_nCompression == COMPRESSION_LERC ||
-            m_nCompression == COMPRESSION_WEBP) ) )
+            m_nCompression == COMPRESSION_WEBP) )
     {
         if( m_bBlockOrderRowMajor || m_bLeaderSizeAsUInt4 ||
             m_bTrailerRepeatedLast4BytesRepeated )
@@ -9358,7 +9332,7 @@ bool GTiffDataset::SubmitCompressionJob( int nStripOrTile, GByte* pabyData,
 /************************************************************************/
 
 template<class T> static void DiscardLsbT(GByte* pabyBuffer, 
-                                         GPtrDiff_t nBytes,
+                                         size_t nBytes,
                                          int iBand,
                                          int nBands,
                                          uint16 nPlanarConfig,
@@ -9368,7 +9342,7 @@ template<class T> static void DiscardLsbT(GByte* pabyBuffer,
     {
         const int nMask = panMaskOffsetLsb[iBand].nMask;
         const int nOffset = panMaskOffsetLsb[iBand].nOffset;
-        for( decltype(nBytes) i = 0; i < nBytes/2; ++i )
+        for( size_t i = 0; i < nBytes/sizeof(T); ++i )
         {
             reinterpret_cast<T*>(pabyBuffer)[i] =
                 static_cast<T>(
@@ -9378,7 +9352,7 @@ template<class T> static void DiscardLsbT(GByte* pabyBuffer,
     }
     else
     {
-        for( decltype(nBytes) i = 0; i < nBytes/2; i += nBands )
+        for( size_t i = 0; i < nBytes/sizeof(T); i += nBands )
         {
             for( int j = 0; j < nBands; ++j )
             {
@@ -12476,8 +12450,8 @@ GDALDataset *GTiffDataset::Open( GDALOpenInfo * poOpenInfo )
     }
 
     // Store errors/warnings and emit them later.
-    std::vector<GTIFFErrorStruct> aoErrors;
-    CPLPushErrorHandlerEx(GTIFFErrorHandler, &aoErrors);
+    std::vector<CPLErrorHandlerAccumulatorStruct> aoErrors;
+    CPLInstallErrorHandlerAccumulator(aoErrors);
     CPLSetCurrentErrorHandlerCatchDebug( FALSE );
     const bool bDeferStrileLoading = CPLTestBool(
         CPLGetConfigOption("GTIFF_USE_DEFER_STRILE_LOADING", "YES"));
@@ -12487,7 +12461,7 @@ GDALDataset *GTiffDataset::Open( GDALOpenInfo * poOpenInfo )
                         ((bStreaming || !bDeferStrileLoading) ? "r" : "rDO") :
                         (!bDeferStrileLoading ? "r+" : "r+D"),
                       poOpenInfo->fpL );
-    CPLPopErrorHandler();
+    CPLUninstallErrorHandlerAccumulator();
 
     // Now emit errors and change their criticality if needed
     // We only emit failures if we didn't manage to open the file.
@@ -15417,12 +15391,47 @@ TIFF *GTiffDataset::CreateLL( const char * pszFilename,
     int l_nBlockXSize = 0;
     const char *pszValue = CSLFetchNameValue(papszParmList, "BLOCKXSIZE");
     if( pszValue != nullptr )
+    {
         l_nBlockXSize = atoi( pszValue );
+        if( l_nBlockXSize < 0 )
+        {
+            CPLError(CE_Failure, CPLE_IllegalArg,
+                     "Invalid value for BLOCKXSIZE");
+            return nullptr;
+        }
+    }
 
     int l_nBlockYSize = 0;
     pszValue = CSLFetchNameValue(papszParmList, "BLOCKYSIZE");
     if( pszValue != nullptr )
+    {
         l_nBlockYSize = atoi( pszValue );
+        if( l_nBlockYSize < 0 )
+        {
+            CPLError(CE_Failure, CPLE_IllegalArg,
+                     "Invalid value for BLOCKYSIZE");
+            return nullptr;
+        }
+    }
+
+    if( bTiled )
+    {
+        if( l_nBlockXSize == 0 )
+            l_nBlockXSize = 256;
+
+        if( l_nBlockYSize == 0 )
+            l_nBlockYSize = 256;
+
+        unsigned nTileXCount = DIV_ROUND_UP(nXSize, l_nBlockXSize);
+        unsigned nTileYCount = DIV_ROUND_UP(nYSize, l_nBlockYSize);
+        if( nTileXCount > UINT_MAX / nTileYCount )
+        {
+            CPLError(CE_Failure, CPLE_NotSupported,
+                     "File too large regarding tile size. This would result "
+                     "in a file with more than 4 billion tiles");
+            return nullptr;
+        }
+    }
 
     int nPlanar = 0;
     pszValue = CSLFetchNameValue(papszParmList, "INTERLEAVE");
@@ -15664,6 +15673,10 @@ TIFF *GTiffDataset::CreateLL( const char * pszFilename,
 
     if( bAppend )
     {
+        // This is a bit of a hack to cause (*tif->tif_cleanup)(tif); to be called.
+        // See https://trac.osgeo.org/gdal/ticket/2055
+        TIFFSetField( l_hTIFF, TIFFTAG_COMPRESSION, COMPRESSION_NONE );
+        TIFFFreeDirectory( l_hTIFF );
         TIFFCreateDirectory( l_hTIFF );
     }
 
@@ -15697,8 +15710,7 @@ TIFF *GTiffDataset::CreateLL( const char * pszFilename,
             if( l_nBitsPerSample != 16 && l_nBitsPerSample != 32 )
             {
                 CPLError(CE_Warning, CPLE_NotSupported,
-                     "NBITS is not supported for data type %s",
-                     GDALGetDataTypeName(eType));
+                     "Only NBITS=16 is supported for data type Float32");
                 l_nBitsPerSample = GDALGetDataTypeSizeBits(eType);
             }
         }
@@ -15974,12 +15986,6 @@ TIFF *GTiffDataset::CreateLL( const char * pszFilename,
 /* -------------------------------------------------------------------- */
     if( bTiled )
     {
-        if( l_nBlockXSize == 0 )
-            l_nBlockXSize = 256;
-
-        if( l_nBlockYSize == 0 )
-            l_nBlockYSize = 256;
-
         if( !TIFFSetField( l_hTIFF, TIFFTAG_TILEWIDTH, l_nBlockXSize ) ||
             !TIFFSetField( l_hTIFF, TIFFTAG_TILELENGTH, l_nBlockYSize ) )
         {
@@ -18997,8 +19003,11 @@ void GTiffDataset::LoadEXIFMetadata()
                              nExifOffset, nInterOffset, nGPSOffset );
     }
 
-    m_oGTiffMDMD.SetMetadata( papszMetadata, "EXIF" );
-    CSLDestroy( papszMetadata );
+    if( papszMetadata )
+    {
+        m_oGTiffMDMD.SetMetadata( papszMetadata, "EXIF" );
+        CSLDestroy( papszMetadata );
+    }
 }
 
 /************************************************************************/
@@ -19571,17 +19580,14 @@ CPLString GTiffGetCompressValues(bool& bHasLZW,
         }
     }
 #ifdef HAVE_LERC
-    if( !bForCOG )
+    osCompressValues +=
+                    "       <Value>LERC</Value>";
+    osCompressValues +=
+                    "       <Value>LERC_DEFLATE</Value>";
+    if( bHasZSTD )
     {
         osCompressValues +=
-                        "       <Value>LERC</Value>";
-        osCompressValues +=
-                        "       <Value>LERC_DEFLATE</Value>";
-        if( bHasZSTD )
-        {
-            osCompressValues +=
-                        "       <Value>LERC_ZSTD</Value>";
-        }
+                    "       <Value>LERC_ZSTD</Value>";
     }
 #endif
     _TIFFfree( codecs );
