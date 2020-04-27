@@ -38,6 +38,7 @@ Synopsis
             [-clipdstwhere expression]
             [-wrapdateline] [-datelineoffset val]
             [[-simplify tolerance] | [-segmentize max_dist]]
+            [-makevalid]
             [-addfields] [-unsetFid]
             [-relaxedFieldNameMatch] [-forceNullable] [-unsetDefault]
             [-fieldTypeToString All|(type1[,type2]*)] [-unsetFieldWidth]
@@ -164,6 +165,9 @@ output coordinate system or even reprojecting the features during translation.
     geometries, for example when forcing conversion of multi-part multipolygons
     with ``-nlt POLYGON``, the resulting polygon will break the Simple Features
     rules.
+
+    Starting with GDAL 3.0.5, ``-nlt CONVERT_TO_LINEAR`` and ``-nlt PROMOTE_TO_MULTI``
+    can be used simultaneously.
 
 .. option:: -dim <val>
 
@@ -298,6 +302,13 @@ output coordinate system or even reprojecting the features during translation.
 
     Maximum distance between 2 nodes. Used to create intermediate points.
 
+.. option:: -makevalid
+
+    Run the :cpp:func:`OGRGeometry::MakeValid` operation on geometries to ensure
+    they are valid regarding the rules of the Simple Features specification.
+
+    .. versionadded: 3.1 (requires GEOS 3.8 or later)
+
 .. option:: -fieldTypeToString type1,...
 
     Converts any field of the specified type to a field of type string in the
@@ -337,7 +348,7 @@ output coordinate system or even reprojecting the features during translation.
 .. option:: -explodecollections
 
     Produce one feature for each geometry in any kind of geometry collection in
-    the source file
+    the source file, applied after any ``-sql`` option.
 
 .. option:: -zfield <field_name>
 

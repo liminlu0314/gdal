@@ -27,3 +27,6 @@ gdal/test.cpp
 gdal/gdaltest.cpp
 /gdal/proj
 gdal/nmake-my.opt
+# CMake
+CMakeLists.txt
+*.cmake

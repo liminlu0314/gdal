@@ -10,6 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import datetime
 import os
 import sys
 sys.path.insert(0, os.path.abspath('_extensions'))
@@ -18,9 +19,8 @@ sys.path.insert(0, os.path.abspath('_extensions'))
 # -- Project information -----------------------------------------------------
 
 project = 'GDAL'
-copyright = '1998-2019'
+copyright = '1998-' + str(datetime.date.today().year)
 author = 'Frank Warmerdam, Even Rouault, and others'
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -52,6 +52,7 @@ html_theme = 'gdal_rtd'
 
 html_context = {
   'display_github': True,
+  'theme_vcs_pageview_mode': 'edit',
   'github_user': 'OSGeo',
   'github_repo': 'gdal',
   'github_version': '/master/gdal/doc/source/'
@@ -408,7 +409,6 @@ breathe_default_project = "api"
 # Tell sphinx what the primary language being documented is.
 primary_domain = 'cpp'
 
-import redirects
-redirect_files = redirects.gather_redirects()
+# -- Redirects --------------------------------------------------
 
-
+enable_redirects = False

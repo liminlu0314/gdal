@@ -236,9 +236,6 @@ void OGRRegisterAllInternal()
 #ifdef EDIGEO_ENABLED
     RegisterOGREDIGEO();
 #endif
-#ifdef GFT_ENABLED
-    RegisterOGRGFT();
-#endif
 #ifdef SVG_ENABLED
     RegisterOGRSVG();
 #endif
@@ -311,6 +308,12 @@ void OGRRegisterAllInternal()
 #ifdef MVT_ENABLED
     RegisterOGRMVT();
 #endif
+#ifdef NGW_ENABLED
+    RegisterOGRNGW();
+#endif // NGW_ENABLED
+#ifdef MAPML_ENABLED
+    RegisterOGRMapML();
+#endif
 
 /* Put TIGER and AVCBIN at end since they need poOpenInfo->GetSiblingFiles() */
 #ifdef TIGER_ENABLED
@@ -321,8 +324,5 @@ void OGRRegisterAllInternal()
     RegisterOGRAVCE00();
 #endif
 
-#ifdef NGW_ENABLED
-    RegisterOGRNGW();
-#endif // NGW_ENABLED
 
 } /* OGRRegisterAll */
