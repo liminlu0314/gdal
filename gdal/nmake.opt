@@ -42,6 +42,14 @@ MSVC_VER=1910
 !ENDIF
 
 ###############################################################################
+# Allow setting of parallel compilation number of processors with CPU_COUNT 
+# variable
+
+!IFNDEF CPU_COUNT
+CPU_COUNT=%NUMBER_OF_PROCESSORS%
+!ENDIF
+
+###############################################################################
 # Optional use of Visual Leak Detector (VLD) by Dan Moulding, available at
 # http://vld.codeplex.com/
 # Uncomment this line to use VLD in debug configuration only:
@@ -114,17 +122,23 @@ CXX_ANALYZE_FLAGS=
 # Set DEBUG=1 to create a debug build
 !IFNDEF DEBUG
 DEBUG=0
+!IFNDEF POSTFIX
+POSTFIX=
+!ENDIF
 !ENDIF
 
 # Force PDB output for DEBUG mode
 !IF "$(DEBUG)" == "1"
 WITH_PDB=1
+!IFNDEF POSTFIX
+POSTFIX=_d
+!ENDIF
 !ELSE IF "$(DEBUG)" != "0"
 !ERROR DEBUG should be set to 0 or 1
 !ENDIF
 
 !IFNDEF GDAL_PDB
-GDAL_PDB = $(GDAL_ROOT)\gdal$(VERSION).pdb
+GDAL_PDB = $(GDAL_ROOT)\gdal$(VERSION)$(POSTFIX).pdb
 !ENDIF
 
 !IFDEF WITH_PDB
@@ -135,7 +149,7 @@ CXX_PDB_FLAGS=
 
 !IFNDEF OPTFLAGS
 !IF "$(DEBUG)" == "0"
-OPTFLAGS= $(CXX_ANALYZE_FLAGS) $(CXX_PDB_FLAGS) /nologo /MP /MD /EHsc /Ox /FC /D_CRT_SECURE_NO_DEPRECATE /D_CRT_NONSTDC_NO_DEPRECATE /DNDEBUG
+OPTFLAGS= $(CXX_ANALYZE_FLAGS) $(CXX_PDB_FLAGS) /nologo /MP$(CPU_COUNT) /MD /EHsc /Ox /FC /D_CRT_SECURE_NO_DEPRECATE /D_CRT_NONSTDC_NO_DEPRECATE /DNDEBUG
 !ELSE
 OPTFLAGS= $(CXX_ANALYZE_FLAGS) $(CXX_PDB_FLAGS) /nologo /MP$(CPU_COUNT) /MDd /EHsc /FC /D_CRT_SECURE_NO_DEPRECATE /D_CRT_NONSTDC_NO_DEPRECATE /DDEBUG /DDEBUG_VSIMALLOC
 !ENDIF
@@ -235,6 +249,10 @@ INCLUDE_GNM_FRMTS = YES
 # To be enabled defined to point to wsetargv.obj from the Visual C++ directory,
 # when you want the utility programs to be able to expand wildcards. 
 #SETARGV =	"D:\Software\VStudio\VC98\lib\wsetargv.obj"
+
+# PROJ stuff (required dependency: PROJ >= 6)
+PROJ_INCLUDE = -IE:\GDAL\gdal_need\proj\include
+PROJ_LIBRARY = E:\GDAL\gdal_need\proj\lib\proj_6_0.lib
 
 # Uncomment to build with libiconv library to support extended character
 # recoding capabilities. GDAL's internal stub implementation supports
@@ -542,6 +560,10 @@ HDF5_PLUGIN = YES
 HDF5_DIR =	"E:\GDAL\gdal_need\CMake-hdf5-1.10.4\build\_CPack_Packages\win64\ZIP\HDF5-1.10.4-win64"
 HDF5_LIB =	$(HDF5_DIR)\lib\libhdf5.lib $(HDF5_DIR)\lib\libhdf5_cpp.lib $(HDF5_DIR)\lib\zlib.lib $(HDF5_DIR)\lib\szip.lib
 
+# Needed to define H5_BUILT_AS_DYNAMIC_LIB for windows compilation 
+# scenarios where it is not exported on the target (non-CMake builds)
+#HDF5_H5_IS_DLL = YES
+
 # Uncomment the following and update to enable KEA support.
 #KEA_PLUGIN = NO
 #KEA_CFLAGS = -Ic:\kea\include
@@ -641,17 +663,6 @@ NETCDF_INC_DIR=E:\GDAL\gdal_need\NetCDF-4.6.2\include
 #NETCDF_HAS_NC4 = yes
 #NETCDF_HAS_HDF4 = yes
 
-# PROJ stuff
-# Uncomment the following lines to link PROJ library statically. Otherwise
-# it will be linked dynamically during runtime.
-# To use the new API of proj5 or later, use
-#PROJ_FLAGS = -DPROJ_STATIC -DPROJ_VERSION=5
-# for proj 4.x:
-#PROJ_FLAGS = -DPROJ_STATIC -DPROJ_VERSION=4
-
-PROJ_INCLUDE = -IE:\GDAL\gdal_need\proj\include
-PROJ_LIBRARY = E:\GDAL\gdal_need\proj\lib\proj_6_0.lib
-
 # Add ORACLE support.
 # Uncomment the following line to enable OCI Oracle Spatial support.
 #ORACLE_HOME =	C:/Software/Oracle/Product/10.1.0/db_1
@@ -697,7 +708,7 @@ FGDB_LIB = $(FGDB_SDK)\lib64\FileGDBAPI.lib
 # Uncomment to use libcurl (DLL by default)
 # The cURL library is used for WCS, WMS, GeoJSON, SRS call importFromUrl(), WFS, GFT, CouchDB, /vsicurl/ etc.
 CURL_DIR=E:\GDAL\gdal_need\curl\x64
-CURL_INC = -I$(CURL_DIR)/include
+CURL_INC = -I$(CURL_DIR)/include -DHAVE_CURL
 # Uncomment following line to use libcurl as dynamic library
 CURL_LIB = $(CURL_DIR)/lib/libcurl_imp.lib wsock32.lib wldap32.lib winmm.lib
 # Uncomment following two lines to use libcurl as static library
@@ -749,29 +760,15 @@ GEOS_LIB     = $(GEOS_DIR)/lib/geos_c.lib
 #
 # Copyright (C) 2015 Klokan Technologies GmbH (http://www.klokantech.com/)
 # Author: Martin Mikita <martin.mikita@klokantech.com>, xmikit00 @ FIT VUT Brno
+# Copyright 2019 Even Rouault
 #
-# Pdfium can be built from the win_gdal_build branch at https://github.com/rouault/pdfium that
-# has the following patch to ensure /MD (MultiThreadedDLL) linking consistent with GDAL one.
-# Build script from PDFium is available at https://github.com/rouault/pdfium/tree/build
-#
-#diff --git a/build/standalone.gypi b/build/standalone.gypi
-#index ecf849b..0e567e4 100644
-#--- a/build/standalone.gypi
-#+++ b/build/standalone.gypi
-#@@ -100,7 +100,8 @@
-#               ['component=="shared_library"', {
-#                 'RuntimeLibrary': '2',  #/MD
-#               }, {
-#-                'RuntimeLibrary': '0',  #/MT
-#+                #'RuntimeLibrary': '0',  #/MT
-#+                 'RuntimeLibrary': '2',  #/MD
-#               }],
-#             ],
-#
+# Pdfium must be built from https://github.com/rouault/pdfium_build_gdal_3_1
+
 #PDFIUM_ENABLED = YES
-#PDFIUM_CFLAGS = -Ie:/pdfium/ -Ie:/pdfium/public
-#PDFIUM_LIB_DIR = e:/pdfium/build/Release/lib
-#PDFIUM_LIBS = $(PDFIUM_LIB_DIR)/pdfium.lib $(PDFIUM_LIB_DIR)/bigint.lib $(PDFIUM_LIB_DIR)/fdrm.lib $(PDFIUM_LIB_DIR)/formfiller.lib $(PDFIUM_LIB_DIR)/fpdfapi.lib $(PDFIUM_LIB_DIR)/fpdfdoc.lib $(PDFIUM_LIB_DIR)/fpdftext.lib $(PDFIUM_LIB_DIR)/freetype.lib $(PDFIUM_LIB_DIR)/fxcodec.lib $(PDFIUM_LIB_DIR)/fxcrt.lib $(PDFIUM_LIB_DIR)/fxedit.lib $(PDFIUM_LIB_DIR)/fxge.lib $(PDFIUM_LIB_DIR)/pdfwindow.lib $(PDFIUM_LIB_DIR)/fx_agg.lib $(PDFIUM_LIB_DIR)/fx_lcms2.lib $(PDFIUM_LIB_DIR)/fx_libjpeg.lib $(PDFIUM_LIB_DIR)/fx_libopenjpeg.lib $(PDFIUM_LIB_DIR)/fx_zlib.lib gdi32.lib kernel32.lib advapi32.lib
+#PDFIUM_CFLAGS = -IC:\dev\pdfium\install\include\pdfium
+#PDFIUM_LIB_DIR = C:\dev\pdfium\install\lib
+#PDFIUM_LIBS = $(PDFIUM_LIB_DIR)\pdfium.lib gdi32.lib kernel32.lib user32.lib
+
 
 # Build PDF driver as plugin
 #PDF_PLUGIN = NO
@@ -923,7 +920,9 @@ OPENCL_LIB     =
 # Location of MS Data Access SDK (not really needed anymore I think)
 #MSDASDK =	D:\Software\MDAC_2.6
 
-GDAL_DLL =	gdal$(VERSION).dll
+!IFNDEF GDAL_DLL
+GDAL_DLL =	gdal$(VERSION)$(POSTFIX).dll
+!ENDIF
 
 INC	=	-I$(GDAL_ROOT)\port -I$(GDAL_ROOT)\ogr -I$(GDAL_ROOT)\gcore \
 		-I$(GDAL_ROOT)\alg -I$(GDAL_ROOT)\ogr\ogrsf_frmts  -I$(GDAL_ROOT)\gnm -I$(GDAL_ROOT)\gnm\gnm_frmts -I$(GDAL_ROOT)\apps
@@ -964,11 +963,15 @@ INSTALL	=	xcopy /y /r /d /f /I
 
 CPLLIB	=    $(GDAL_ROOT)/port/cpl.lib
 
+!IFNDEF GDAL_LIB_NAME
 !IF "$(DLLBUILD)" == "1"
-GDALLIB	=    $(GDAL_ROOT)/gdal_i.lib
+GDAL_LIB_NAME = gdal_i$(POSTFIX).lib
 !ELSE
-GDALLIB	=    $(GDAL_ROOT)/gdal.lib
+GDAL_LIB_NAME = gdal$(POSTFIX).lib
 !ENDIF
+!ENDIF
+
+GDALLIB = $(GDAL_ROOT)\$(GDAL_LIB_NAME)
 
 !IFDEF ODBC_SUPPORTED
 # legacy_stdio_definitions.lib : https://connect.microsoft.com/VisualStudio/feedback/details/1134693/vs-2015-ctp-5-c-vsnwprintf-s-and-other-functions-are-not-exported-in-appcrt140-dll-breaking-linkage-of-static-libraries
