@@ -26,3 +26,4 @@ gdal/nmake_x86.opt
 gdal/test.cpp
 gdal/gdaltest.cpp
 /gdal/proj
+gdal/nmake-my.opt
