@@ -54,6 +54,7 @@
 #include "gdal.h"
 #include "gdal_alg.h"
 #include "gdal_alg_priv.h"
+#include "gdal_thread_pool.h"
 #include "gdalwarpkernel_opencl.h"
 
 // We restrict to 64bit processors because they are guaranteed to have SSE2.
@@ -210,21 +211,14 @@ struct _GWKJobStruct
     void           (*pfnFunc)(void*); // used by GWKRun() to assign the proper pTransformerArg
 } ;
 
-struct GWKThreadInitData
-{
-    GDALTransformerFunc pfnTransformerInit = nullptr;
-    void               *pTransformerArgInit = nullptr;
-
-    void               *pTransformerArg = nullptr;
-    GIntBig             nThreadId = 0;
-};
-
 struct GWKThreadData
 {
-    CPLWorkerThreadPool* poThreadPool = nullptr;
+    std::unique_ptr<CPLJobQueue> poJobQueue{};
     GWKJobStruct* pasThreadJob = nullptr;
+    int nThreads = 0;
     CPLCond* hCond = nullptr;
     CPLMutex* hCondMutex = nullptr;
+    bool bTransformerArgInputAssignedToThread = false;
     void* pTransformerArgInput = nullptr; // owned by calling layer. Not to be destroyed
     std::map<GIntBig, void*> mapThreadToTransformerArg{};
 };
@@ -292,38 +286,11 @@ static CPLErr GWKGenericMonoThread( GDALWarpKernel *poWK,
 }
 
 /************************************************************************/
-/*                     GWKThreadInitTransformer()                       */
-/************************************************************************/
-
-static void GWKThreadInitTransformer(void* pData)
-{
-    GWKThreadInitData* psInitData = static_cast<GWKThreadInitData*>(pData);
-    if( psInitData->pTransformerArg == nullptr )
-        psInitData->pTransformerArg =
-            GDALCloneTransformer(psInitData->pTransformerArgInit);
-    if( psInitData->pTransformerArg != nullptr )
-    {
-        // In case of lazy opening (for example RPCDEM), do a dummy
-        // transformation to be sure that the DEM is really opened with the
-        // context of this thread.
-        double dfX = 0.5;
-        double dfY = 0.5;
-        double dfZ = 0.0;
-        int bSuccess = FALSE;
-        CPLPushErrorHandler(CPLQuietErrorHandler);
-        psInitData->pfnTransformerInit(psInitData->pTransformerArg, TRUE, 1,
-                                  &dfX, &dfY, &dfZ, &bSuccess );
-        CPLPopErrorHandler();
-    }
-    psInitData->nThreadId = CPLGetPID();
-}
-
-/************************************************************************/
 /*                          GWKThreadsCreate()                          */
 /************************************************************************/
 
 void* GWKThreadsCreate( char** papszWarpOptions,
-                        GDALTransformerFunc pfnTransformer,
+                        GDALTransformerFunc /* pfnTransformer */,
                         void* pTransformerArg )
 {
     const char* pszWarpThreads =
@@ -345,13 +312,10 @@ void* GWKThreadsCreate( char** papszWarpOptions,
     CPLCond* hCond = nullptr;
     if( nThreads )
         hCond = CPLCreateCond();
-    if( nThreads && hCond )
+    auto poThreadPool = nThreads > 0 ? GDALGetGlobalThreadPool(nThreads) : nullptr;
+    if( nThreads && hCond && poThreadPool )
     {
-/* -------------------------------------------------------------------- */
-/*      Duplicate pTransformerArg per thread.                           */
-/* -------------------------------------------------------------------- */
-        bool bTransformerCloningSuccess = true;
-
+        psThreadData->nThreads = nThreads;
         psThreadData->hCond = hCond;
         psThreadData->pasThreadJob = static_cast<GWKJobStruct *>(
             VSI_CALLOC_VERBOSE(sizeof(GWKJobStruct), nThreads));
@@ -369,71 +333,14 @@ void* GWKThreadsCreate( char** papszWarpOptions,
         }
         CPLReleaseMutex(psThreadData->hCondMutex);
 
-        std::vector<std::unique_ptr<GWKThreadInitData>> apoInitData;
-        std::vector<void*> apInitData;
         for( int i = 0; i < nThreads; i++ )
         {
             psThreadData->pasThreadJob[i].hCond = psThreadData->hCond;
             psThreadData->pasThreadJob[i].hCondMutex = psThreadData->hCondMutex;
-
-            std::unique_ptr<GWKThreadInitData> poInitData(new GWKThreadInitData());
-            poInitData->pfnTransformerInit = pfnTransformer;
-            poInitData->pTransformerArgInit = pTransformerArg;
-            if( i == 0 )
-                poInitData->pTransformerArg = pTransformerArg;
-            else
-                poInitData->pTransformerArg = nullptr;
-            apoInitData.push_back(std::move(poInitData));
-            apInitData.push_back(apoInitData.back().get());
         }
 
-        psThreadData->poThreadPool = new (std::nothrow) CPLWorkerThreadPool();
-        if( psThreadData->poThreadPool == nullptr ||
-            !psThreadData->poThreadPool->Setup(nThreads,
-                                          GWKThreadInitTransformer,
-                                          &apInitData[0]) )
-        {
-            GWKThreadsEnd(psThreadData);
-            return nullptr;
-        }
-
-        for( int i = 1; i < nThreads; i++ )
-        {
-            if( apoInitData[i]->pTransformerArg == nullptr )
-            {
-                CPLDebug("WARP", "Cannot deserialize transformer");
-                bTransformerCloningSuccess = false;
-                break;
-            }
-        }
-
-        if( bTransformerCloningSuccess )
-        {
-            psThreadData->pTransformerArgInput = pTransformerArg;
-            for( int i = 0; i < nThreads; i++ )
-            {
-                const auto nThreadId = apoInitData[i]->nThreadId;
-                CPLAssert(psThreadData->mapThreadToTransformerArg.find(nThreadId) ==
-                    psThreadData->mapThreadToTransformerArg.end());
-                psThreadData->mapThreadToTransformerArg[nThreadId] =
-                    apoInitData[i]->pTransformerArg;
-            }
-        }
-        else
-        {
-            for( int i = 1; i < nThreads; i++ )
-            {
-                if( apoInitData[i]->pTransformerArg )
-                    GDALDestroyTransformer(apoInitData[i]->pTransformerArg);
-            }
-            CPLFree(psThreadData->pasThreadJob);
-            psThreadData->pasThreadJob = nullptr;
-            delete psThreadData->poThreadPool;
-            psThreadData->poThreadPool = nullptr;
-
-            CPLDebug("WARP", "Cannot duplicate transformer function. "
-                     "Falling back to mono-thread computation");
-        }
+        psThreadData->poJobQueue = poThreadPool->CreateJobQueue();
+        psThreadData->pTransformerArgInput = pTransformerArg;
     }
 
     return psThreadData;
@@ -449,14 +356,14 @@ void GWKThreadsEnd( void* psThreadDataIn )
         return;
 
     GWKThreadData* psThreadData = static_cast<GWKThreadData *>(psThreadDataIn);
-    if( psThreadData->poThreadPool )
+    if( psThreadData->poJobQueue )
     {
         for( auto& pair: psThreadData->mapThreadToTransformerArg )
         {
             if( pair.second != psThreadData->pTransformerArgInput )
                 GDALDestroyTransformer(pair.second);
         }
-        delete psThreadData->poThreadPool;
+        psThreadData->poJobQueue.reset();
     }
     CPLFree(psThreadData->pasThreadJob);
     if( psThreadData->hCond )
@@ -472,14 +379,48 @@ void GWKThreadsEnd( void* psThreadDataIn )
 
 static void ThreadFuncAdapter(void* pData)
 {
-    // Assign the pTransformerArg created in the current thread to this job
-    // This workarounds the PROJ bug fixed in https://github.com/OSGeo/PROJ/pull/1726
     GWKJobStruct* psJob = static_cast<GWKJobStruct *>(pData);
-    const GWKThreadData* psThreadData =
-        static_cast<const GWKThreadData*>(psJob->poWK->psThreadData);
-    auto oIter = psThreadData->mapThreadToTransformerArg.find(CPLGetPID());
-    CPLAssert(oIter != psThreadData->mapThreadToTransformerArg.end());
-    psJob->pTransformerArg = oIter->second;
+    GWKThreadData* psThreadData =
+        static_cast<GWKThreadData*>(psJob->poWK->psThreadData);
+
+    // Look if we have already a per-thread transformer
+    void* pTransformerArg = nullptr;
+    const GIntBig nThreadId = CPLGetPID();
+    CPLAcquireMutex(psThreadData->hCondMutex, 1.0);
+    auto oIter = psThreadData->mapThreadToTransformerArg.find(nThreadId);
+    if (oIter != psThreadData->mapThreadToTransformerArg.end())
+    {
+        pTransformerArg = oIter->second;
+    }
+    else if( !psThreadData->bTransformerArgInputAssignedToThread )
+    {
+        // Borrow the original transformer, as it has not already been done
+        psThreadData->bTransformerArgInputAssignedToThread = true;
+        pTransformerArg = psThreadData->pTransformerArgInput;
+        psThreadData->mapThreadToTransformerArg[nThreadId] = pTransformerArg;
+    }
+    CPLReleaseMutex(psThreadData->hCondMutex);
+
+    // If no transformer assigned to current thread, instanciate one
+    if( pTransformerArg == nullptr )
+    {
+        // This somehow assumes that GDALCloneTransformer() is thread-safe
+        // which should normally be the case.
+        pTransformerArg =
+            GDALCloneTransformer(psThreadData->pTransformerArgInput);
+        if( !pTransformerArg )
+        {
+            *(psJob->pbStop) = TRUE;
+            return;
+        }
+
+        // register in map
+        CPLAcquireMutex(psThreadData->hCondMutex, 1.0);
+        psThreadData->mapThreadToTransformerArg[nThreadId] = pTransformerArg;
+        CPLReleaseMutex(psThreadData->hCondMutex);
+    }
+
+    psJob->pTransformerArg = pTransformerArg;
     psJob->pfnFunc(pData);
 }
 
@@ -511,13 +452,12 @@ static CPLErr GWKRun( GDALWarpKernel *poWK,
 
     GWKThreadData* psThreadData =
         static_cast<GWKThreadData*>(poWK->psThreadData);
-    if( psThreadData == nullptr || psThreadData->poThreadPool == nullptr )
+    if( psThreadData == nullptr || psThreadData->poJobQueue == nullptr )
     {
         return GWKGenericMonoThread(poWK, pfnFunc);
     }
 
-    int nThreads =
-        std::min(psThreadData->poThreadPool->GetThreadCount(), nDstYSize / 2);
+    int nThreads = std::min(psThreadData->nThreads, nDstYSize / 2);
     // Config option mostly useful for tests to be able to test multithreading
     // with small rasters
     const int nWarpChunkSize = atoi(
@@ -557,7 +497,7 @@ static CPLErr GWKRun( GDALWarpKernel *poWK,
         else
             psThreadData->pasThreadJob[i].pfnProgress = nullptr;
         psThreadData->pasThreadJob[i].pfnFunc = pfnFunc;
-        psThreadData->poThreadPool->SubmitJob( ThreadFuncAdapter,
+        psThreadData->poJobQueue->SubmitJob( ThreadFuncAdapter,
                             static_cast<void*>(&psThreadData->pasThreadJob[i]) );
     }
 
@@ -589,7 +529,7 @@ static CPLErr GWKRun( GDALWarpKernel *poWK,
 /* -------------------------------------------------------------------- */
 /*      Wait for all jobs to complete.                                  */
 /* -------------------------------------------------------------------- */
-    psThreadData->poThreadPool->WaitCompletion();
+    psThreadData->poJobQueue->WaitCompletion();
 
     return !bStop ? CE_None : CE_Failure;
 }
@@ -1612,7 +1552,6 @@ static bool GWKSetPixelValue( GDALWarpKernel *poWK, int iBand,
 
           default:
             CPLAssert( false );
-            dfDstDensity = 0.0;
             return false;
         }
 
@@ -1810,7 +1749,6 @@ static bool GWKSetPixelValueReal( GDALWarpKernel *poWK, int iBand,
 
           default:
             CPLAssert( false );
-            dfDstDensity = 0.0;
             return false;
         }
 
@@ -2518,7 +2456,6 @@ static bool GWKBilinearResampleNoMasks4SampleT( GDALWarpKernel *poWK, int iBand,
         return true;
     }
 
-    double dfMult = 0.0;
     double dfAccumulatorDivisor = 0.0;
     double dfAccumulator = 0.0;
 
@@ -2526,7 +2463,7 @@ static bool GWKBilinearResampleNoMasks4SampleT( GDALWarpKernel *poWK, int iBand,
     if( iSrcX >= 0 && iSrcX < poWK->nSrcXSize
         && iSrcY >= 0 && iSrcY < poWK->nSrcYSize )
     {
-        dfMult = dfRatioX * dfRatioY;
+        const double dfMult = dfRatioX * dfRatioY;
 
         dfAccumulatorDivisor += dfMult;
 
@@ -2537,7 +2474,7 @@ static bool GWKBilinearResampleNoMasks4SampleT( GDALWarpKernel *poWK, int iBand,
     if( iSrcX+1 >= 0 && iSrcX+1 < poWK->nSrcXSize
         && iSrcY >= 0 && iSrcY < poWK->nSrcYSize )
     {
-        dfMult = (1.0 - dfRatioX) * dfRatioY;
+        const double dfMult = (1.0 - dfRatioX) * dfRatioY;
 
         dfAccumulatorDivisor += dfMult;
 
@@ -2548,7 +2485,7 @@ static bool GWKBilinearResampleNoMasks4SampleT( GDALWarpKernel *poWK, int iBand,
     if( iSrcX+1 >= 0 && iSrcX+1 < poWK->nSrcXSize
         && iSrcY+1 >= 0 && iSrcY+1 < poWK->nSrcYSize )
     {
-        dfMult = (1.0 - dfRatioX) * (1.0 - dfRatioY);
+        const double dfMult = (1.0 - dfRatioX) * (1.0 - dfRatioY);
 
         dfAccumulatorDivisor += dfMult;
 
@@ -2559,7 +2496,7 @@ static bool GWKBilinearResampleNoMasks4SampleT( GDALWarpKernel *poWK, int iBand,
     if( iSrcX >= 0 && iSrcX < poWK->nSrcXSize
         && iSrcY+1 >= 0 && iSrcY+1 < poWK->nSrcYSize )
     {
-        dfMult = dfRatioX * (1.0 - dfRatioY);
+        const double dfMult = dfRatioX * (1.0 - dfRatioY);
 
         dfAccumulatorDivisor += dfMult;
 
@@ -4745,7 +4682,7 @@ static CPL_INLINE bool GWKCheckAndComputeSrcOffsets(
     // Check for potential overflow when casting from float to int, (if
     // operating outside natural projection area, padfX/Y can be a very huge
     // positive number before doing the actual conversion), as such cast is
-    // undefined behaviour that can trigger exception with some compilers
+    // undefined behavior that can trigger exception with some compilers
     // (see #6753)
     if( _padfX[_iDstX] + 1e-10 > _nSrcXSize + _poWK->nSrcXOff ||
         _padfY[_iDstX] + 1e-10 > _nSrcYSize + _poWK->nSrcYOff )
@@ -5980,22 +5917,22 @@ static void GWKAverageOrModeThread( void* pData)
             // [iDstX,iDstY]x[iDstX+1,iDstY+1] square back to source
             // coordinates, and take the bounding box of the got source
             // coordinates.
-            const double dfXMin = std::min(padfX[iDstX],padfX2[iDstX]);
+            const double dfXMin = std::min(padfX[iDstX],padfX2[iDstX]) -
+                                    poWK->nSrcXOff;
             int iSrcXMin =
-                std::max(static_cast<int>(floor(dfXMin + 1e-10)) -
-                            poWK->nSrcXOff, 0);
-            const double dfXMax = std::max(padfX[iDstX],padfX2[iDstX]);
+                std::max(static_cast<int>(floor(dfXMin + 1e-10)), 0);
+            const double dfXMax = std::max(padfX[iDstX],padfX2[iDstX])  -
+                                    poWK->nSrcXOff;
             int iSrcXMax =
-                std::min(static_cast<int>(ceil(dfXMax - 1e-10)) -
-                            poWK->nSrcXOff, nSrcXSize);
-            const double dfYMin = std::min(padfY[iDstX],padfY2[iDstX]);
+                std::min(static_cast<int>(ceil(dfXMax - 1e-10)), nSrcXSize);
+            const double dfYMin = std::min(padfY[iDstX],padfY2[iDstX]) -
+                                    poWK->nSrcYOff;
             int iSrcYMin =
-                std::max(static_cast<int>(floor(dfYMin + 1e-10)) -
-                            poWK->nSrcYOff, 0);
-            const double dfYMax = std::max(padfY[iDstX],padfY2[iDstX]);
+                std::max(static_cast<int>(floor(dfYMin + 1e-10)), 0);
+            const double dfYMax = std::max(padfY[iDstX],padfY2[iDstX]) -
+                                    poWK->nSrcYOff;
             int iSrcYMax =
-                std::min(static_cast<int>(ceil(dfYMax - 1e-10)) -
-                            poWK->nSrcYOff, nSrcYSize);
+                std::min(static_cast<int>(ceil(dfYMax - 1e-10)), nSrcYSize);
 
             if( iSrcXMin == iSrcXMax && iSrcXMax < nSrcXSize )
                 iSrcXMax++;

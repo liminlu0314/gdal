@@ -71,7 +71,6 @@ def test_srs_write_compd_cs():
         DATUM["Nouvelle_Triangulation_Francaise_Paris",
             SPHEROID["Clarke 1880 (IGN)",6378249.2,293.4660212936265,
                 AUTHORITY["EPSG","7011"]],
-            TOWGS84[-168,-60,320,0,0,0,0],
             AUTHORITY["EPSG","6807"]],
         PRIMEM["Paris",2.5969213],
         UNIT["grad",0.01570796326794897],
@@ -97,7 +96,7 @@ def test_srs_write_compd_cs():
 
     gdal.Unlink('/vsimem/tiff_srs_compd_cs.tif')
 
-    assert sr.IsSame(sr2) == 1, 'did not get expected SRS'
+    assert sr.IsSame(sr2) == 1, wkt
 
 ###############################################################################
 # Test reading a COMPDCS without VerticalCSType
@@ -183,6 +182,19 @@ def test_tiff_srs_WGS_1984_Web_Mercator_Auxiliary_Sphere():
     AXIS["Easting",EAST],
     AXIS["Northing",NORTH],
     EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs"]]"""
+
+###############################################################################
+# Test reading ESRI:102113 WGS_1984_Web_Mercator
+
+
+def test_tiff_srs_WGS_1984_Web_Mercator():
+
+    ds = gdal.Open('data/WGS_1984_Web_Mercator.tif')
+    sr = ds.GetSpatialRef()
+    ds = None
+
+    assert sr.GetAuthorityName(None) == 'ESRI'
+    assert sr.GetAuthorityCode(None) == '102113'
 
 ###############################################################################
 # Test writing and reading various angular units

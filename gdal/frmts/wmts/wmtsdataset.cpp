@@ -205,7 +205,7 @@ class WMTSDataset final: public GDALPamDataset
 class WMTSBand final: public GDALPamRasterBand
 {
   public:
-                  WMTSBand(WMTSDataset* poDS, int nBand);
+                  WMTSBand(WMTSDataset* poDS, int nBand, GDALDataType eDataType);
 
     virtual GDALRasterBand* GetOverview(int nLevel) override;
     virtual int GetOverviewCount() override;
@@ -225,11 +225,11 @@ class WMTSBand final: public GDALPamRasterBand
 /*                            WMTSBand()                                */
 /************************************************************************/
 
-WMTSBand::WMTSBand( WMTSDataset* poDSIn, int nBandIn )
+WMTSBand::WMTSBand( WMTSDataset* poDSIn, int nBandIn, GDALDataType eDataTypeIn )
 {
     poDS = poDSIn;
     nBand = nBandIn;
-    eDataType = GDT_Byte;
+    eDataType = eDataTypeIn;
     poDSIn->apoDatasets[0]->GetRasterBand(1)->
         GetBlockSize(&nBlockXSize, &nBlockYSize);
 }
@@ -1057,6 +1057,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
     int bHasAOI = FALSE;
     OGREnvelope sAOI;
     int nBands = 4;
+    GDALDataType eDataType = GDT_Byte;
     CPLString osProjection;
 
     if( (psXML != nullptr && CPLGetXMLNode(psXML, "=GDAL_WMTS") != nullptr ) ||
@@ -1115,6 +1116,15 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
         WMTSAddOtherXML(psRoot, "ZeroBlockOnServerException", osOtherXML);
 
         nBands = atoi(CPLGetXMLValue(psRoot, "BandsCount", "4"));
+        const char *pszDataType = CPLGetXMLValue(psRoot, "DataType", "Byte");
+        eDataType = GDALGetDataTypeByName(pszDataType);
+        if ((eDataType == GDT_Unknown) || (eDataType >= GDT_TypeCount))
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                "GDALWMTS: Invalid value in DataType. Data type \"%s\" is not supported.", pszDataType);
+            CPLDestroyXMLNode(psGDALWMTS);
+            return nullptr;
+        }
 
         const char* pszULX = CPLGetXMLValue(psRoot, "DataWindow.UpperLeftX", nullptr);
         const char* pszULY = CPLGetXMLValue(psRoot, "DataWindow.UpperLeftY", nullptr);
@@ -2054,6 +2064,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
     "<BlockSizeX>%d</BlockSizeX>" \
     "<BlockSizeY>%d</BlockSizeY>" \
     "<BandsCount>%d</BandsCount>" \
+    "<DataType>%s</DataType>" \
     "%s" \
 "</GDAL_WMS>"
 
@@ -2061,7 +2072,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
                 WMTSEscapeXML(osURL).c_str(),
                 dfULX, dfULY, (bExtendBeyondDateLine) ? dfDateLineX : dfLRX, dfLRY,
                 nTileX, nTileY, (bExtendBeyondDateLine) ? nSizeX1 : nSizeX, nSizeY,
-                oTM.nTileWidth, oTM.nTileHeight, nBands,
+                oTM.nTileWidth, oTM.nTileHeight, nBands, GDALGetDataTypeName(eDataType),
                 osOtherXML.c_str()));
             GDALDataset* poWMSDS = (GDALDataset*)GDALOpenEx(
                 osStr, GDAL_OF_RASTER | GDAL_OF_SHARED | GDAL_OF_VERBOSE_ERROR, nullptr, nullptr, nullptr);
@@ -2075,7 +2086,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
             VRTDatasetH hVRTDS = VRTCreate( nRasterXSize, nRasterYSize );
             for(int iBand=1;iBand<=nBands;iBand++)
             {
-                VRTAddBand( hVRTDS, GDT_Byte, nullptr );
+                VRTAddBand( hVRTDS, eDataType, nullptr );
             }
 
             int nSrcXOff, nSrcYOff, nDstXOff, nDstYOff;
@@ -2097,7 +2108,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
                     WMTSEscapeXML(osURL).c_str(),
                     -dfDateLineX, dfULY, dfLRX - 2 * dfDateLineX, dfLRY,
                     0, nTileY, nSizeX2, nSizeY,
-                    oTM.nTileWidth, oTM.nTileHeight, nBands,
+                    oTM.nTileWidth, oTM.nTileHeight, nBands, GDALGetDataTypeName(eDataType),
                     osOtherXML.c_str());
 
                 GDALDataset* poWMSDS2 = (GDALDataset*)GDALOpenEx(
@@ -2148,7 +2159,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
 
         poDS->SetMetadataItem("INTERLEAVE", "PIXEL", "IMAGE_STRUCTURE");
         for(int i=0;i<nBands;i++)
-            poDS->SetBand(i+1, new WMTSBand(poDS,i+1));
+            poDS->SetBand(i+1, new WMTSBand(poDS,i+1,eDataType));
 
         poDS->osXML = "<GDAL_WMTS>\n";
         poDS->osXML += "  <GetCapabilitiesUrl>" +
@@ -2181,6 +2192,7 @@ GDALDataset* WMTSDataset::Open(GDALOpenInfo* poOpenInfo)
         if( bExtendBeyondDateLine )
             poDS->osXML += "  <ExtendBeyondDateLine>true</ExtendBeyondDateLine>\n";
         poDS->osXML += CPLSPrintf("  <BandsCount>%d</BandsCount>\n", nBands);
+        poDS->osXML += CPLSPrintf("  <DataType>%s</DataType>\n", GDALGetDataTypeName(eDataType));
         poDS->osXML += "  <Cache />\n";
         poDS->osXML += "  <UnsafeSSL>true</UnsafeSSL>\n";
         poDS->osXML += "  <ZeroBlockHttpCodes>204,404</ZeroBlockHttpCodes>\n";

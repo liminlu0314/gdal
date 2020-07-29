@@ -105,7 +105,7 @@ std::shared_ptr<GDALAttribute> GDALIHasAttribute::GetAttributeFromAttributes(
  * GDALMDArrayGetAttributes().
 
  * @param papszOptions Driver specific options determining how attributes
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return the attributes.
  */
@@ -182,7 +182,7 @@ GDALGroup::~GDALGroup() = default;
  * This is the same as the C function GDALGroupGetMDArrayNames().
  *
  * @param papszOptions Driver specific options determining how arrays
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return the array names.
  */
@@ -207,7 +207,7 @@ GDALGroup::GetMDArrayNames(CPL_UNUSED CSLConstList papszOptions) const
  *
  * @param osName Array name.
  * @param papszOptions Driver specific options determining how the array should
- * be opened.  Pass nullptr for default behaviour.
+ * be opened.  Pass nullptr for default behavior.
  *
  * @return the array, or nullptr.
  */
@@ -231,7 +231,7 @@ std::shared_ptr<GDALMDArray> GDALGroup::OpenMDArray(CPL_UNUSED const std::string
  * This is the same as the C function GDALGroupGetGroupNames().
  *
  * @param papszOptions Driver specific options determining how groups
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return the group names.
  */
@@ -255,7 +255,7 @@ std::vector<std::string> GDALGroup::GetGroupNames(CPL_UNUSED CSLConstList papszO
  *
  * @param osName Sub-group name.
  * @param papszOptions Driver specific options determining how the sub-group should
- * be opened.  Pass nullptr for default behaviour.
+ * be opened.  Pass nullptr for default behavior.
  *
  * @return the group, or nullptr.
  */
@@ -281,7 +281,7 @@ std::shared_ptr<GDALGroup> GDALGroup::OpenGroup(CPL_UNUSED const std::string& os
  * This is the same as the C function GDALGroupGetDimensions().
  *
  * @param papszOptions Driver specific options determining how groups
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return the dimensions.
  */
@@ -448,7 +448,7 @@ GUInt64 GDALGroup::GetTotalCopyCost() const
 /** Copy the content of a group into a new (generally empty) group.
  *
  * @param poDstRootGroup Destination root group. Must NOT be nullptr.
- * @param poSrcDS    Source dataset. Migt be nullptr (but for correct behaviour
+ * @param poSrcDS    Source dataset. Migt be nullptr (but for correct behavior
  *                   of some output drivers this is not recommended)
  * @param poSrcGroup Source group. Must NOT be nullptr.
  * @param bStrict Whether to enable stict mode. In strict mode, any error will
@@ -674,6 +674,25 @@ std::shared_ptr<GDALMDArray> GDALGroup::OpenMDArrayFromFullname(
     if( poGroup == nullptr )
         return nullptr;
     return poGroup->OpenMDArray(osName, papszOptions);
+}
+
+/************************************************************************/
+/*                       OpenGroupFromFullname()                        */
+/************************************************************************/
+
+/** Get a group from its fully qualified name.
+ * @since GDAL 3.2
+ */
+std::shared_ptr<GDALGroup> GDALGroup::OpenGroupFromFullname(
+                                                const std::string& osFullName,
+                                                CSLConstList papszOptions) const
+{
+    std::string osName;
+    std::shared_ptr<GDALGroup> curGroupHolder;
+    auto poGroup(GetInnerMostGroup(osFullName, curGroupHolder, osName));
+    if( poGroup == nullptr )
+        return nullptr;
+    return poGroup->OpenGroup(osName, papszOptions);
 }
 
 /************************************************************************/
@@ -1202,7 +1221,7 @@ bool GDALAbstractMDArray::Read(const GUInt64* arrayStartIdx,
     if( !GetDataType().CanConvertTo(bufferDataType) )
     {
         CPLError(CE_Failure, CPLE_AppDefined,
-                 "Array data type is not convertable to buffer data type");
+                 "Array data type is not convertible to buffer data type");
         return false;
     }
 
@@ -1319,7 +1338,7 @@ bool GDALAbstractMDArray::Write(const GUInt64* arrayStartIdx,
     if( !bufferDataType.CanConvertTo(GetDataType()) )
     {
         CPLError(CE_Failure, CPLE_AppDefined,
-                 "Buffer data type is not convertable to array data type");
+                 "Buffer data type is not convertible to array data type");
         return false;
     }
 
@@ -1767,7 +1786,7 @@ bool GDALMDArray::SetOffset(CPL_UNUSED double dfOffset)
  */
 double GDALMDArray::GetScale(CPL_UNUSED bool* pbHasScale) const
 {
-    if( *pbHasScale )
+    if( pbHasScale )
         *pbHasScale = false;
     return 1.0;
 }
@@ -1793,7 +1812,7 @@ double GDALMDArray::GetScale(CPL_UNUSED bool* pbHasScale) const
  */
 double GDALMDArray::GetOffset(CPL_UNUSED bool* pbHasOffset) const
 {
-    if( *pbHasOffset )
+    if( pbHasOffset )
         *pbHasOffset = false;
     return 0.0;
 }
@@ -1950,6 +1969,7 @@ lbl_return_to_caller_end_of_loop:
     }
 
     dimIdx --;
+    // cppcheck-suppress negativeContainerIndex
     switch( stack[dimIdx].return_point )
     {
         case Caller::CALLER_END_OF_LOOP: goto lbl_return_to_caller_end_of_loop;
@@ -2592,7 +2612,7 @@ bool GDALMDArray::CopyFromAllExceptValues(const GDALMDArray* poSrcArray,
 
 /** Copy the content of an array into a new (generally empty) array.
  *
- * @param poSrcDS    Source dataset. Migt be nullptr (but for correct behaviour
+ * @param poSrcDS    Source dataset. Migt be nullptr (but for correct behavior
  *                   of some output drivers this is not recommended)
  * @param poSrcArray Source array. Should NOT be nullptr.
  * @param bStrict Whether to enable stict mode. In strict mode, any error will
@@ -3405,12 +3425,12 @@ static std::shared_ptr<GDALMDArray> CreateFieldNameExtractArray(
  *     dimension of size 1 put at the beginning. That is [[[0,1,2,3],[4,5,6,7]]].</li>
  * </ul>
  *
- * One difference with NumPy behaviour is that ranges that would result in
+ * One difference with NumPy behavior is that ranges that would result in
  * zero elements are not allowed (dimensions of size 0 not being allowed in the
  * GDAL multidimensional model).
  *
  * For field access, the syntax to use is ["field_name"] or ['field_name'].
- * Multipe field specification is not supported currently.
+ * Multiple field specification is not supported currently.
  *
  * Both type of access can be combined, e.g. GetView("[1]['field_name']")
  *
@@ -4119,6 +4139,18 @@ private:
     std::shared_ptr<GDALMDArray> m_poParent{};
     GDALExtendedDataType m_dt {GDALExtendedDataType::Create(GDT_Byte) };
 
+    template<typename Type> void ReadInternal(const size_t* count,
+                                          const GPtrDiff_t* bufferStride,
+                                          const GDALExtendedDataType& bufferDataType,
+                                          void* pDstBuffer,
+                                          const void* pTempBuffer,
+                                          const GDALExtendedDataType& oTmpBufferDT,
+                                          const std::vector<GPtrDiff_t>& tmpBufferStrideVector,
+                                          bool bHasMissingValue, double dfMissingValue,
+                                          bool bHasFillValue, double dfFillValue,
+                                          bool bHasValidMin, double dfValidMin,
+                                          bool bHasValidMax, double dfValidMax) const;
+
 protected:
     explicit GDALMDArrayMask(const std::shared_ptr<GDALMDArray>& poParent):
         GDALAbstractMDArray(std::string(), "Mask of " + poParent->GetName()),
@@ -4180,10 +4212,7 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
             tmpBufferStrideVector[i+1] * count[i+1];
     }
 
-    bool bTmpBufferAsDouble = CPL_TO_BOOL(GDALDataTypeIsFloating(
-        m_poParent->GetDataType().GetNumericDataType()));
-
-    const auto GetSingleValNumericAttr = [this, &bTmpBufferAsDouble]
+    const auto GetSingleValNumericAttr = [this]
         (const char* pszAttrName, bool& bHasVal, double& dfVal)
     {
         auto poAttr = m_poParent->GetAttribute(pszAttrName);
@@ -4191,7 +4220,6 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
             poAttr->GetDimensionsSize()[0] == 1 &&
             poAttr->GetDataType().GetClass() == GEDTC_NUMERIC )
         {
-            bTmpBufferAsDouble = true;
             bHasVal = true;
             dfVal = poAttr->ReadAsDouble();
         }
@@ -4219,7 +4247,6 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
             poValidRange->GetDimensionsSize()[0] == 2 &&
             poValidRange->GetDataType().GetClass() == GEDTC_NUMERIC )
         {
-            bTmpBufferAsDouble = true;
             bHasValidMin = true;
             bHasValidMax = true;
             auto vals = poValidRange->ReadAsDoubleArray();
@@ -4229,9 +4256,10 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
         }
     }
 
-    const auto oTmpBufferDT = bTmpBufferAsDouble ?
-        GDALExtendedDataType::Create(GDT_Float64) :
-        m_poParent->GetDataType();
+    const auto oTmpBufferDT = GDALDataTypeIsComplex(
+            m_poParent->GetDataType().GetNumericDataType()) ?
+                GDALExtendedDataType::Create(GDT_Float64) :
+                m_poParent->GetDataType();
     const size_t nTmpBufferDTSize = oTmpBufferDT.GetSize();
     void *pTempBuffer = VSI_MALLOC2_VERBOSE(nTmpBufferDTSize, nElts);
     if( !pTempBuffer )
@@ -4246,7 +4274,138 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
         VSIFree(pTempBuffer);
         return false;
     }
+ 
+    switch( oTmpBufferDT.GetNumericDataType() )
+    {
+        case GDT_Byte:
+            ReadInternal<GByte>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
 
+        case GDT_UInt16:
+            ReadInternal<GUInt16>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+        case GDT_Int16:
+            ReadInternal<GInt16>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+        case GDT_UInt32:
+            ReadInternal<GUInt32>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+        case GDT_Int32:
+            ReadInternal<GInt32>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+        case GDT_Float32:
+            ReadInternal<float>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+        default:
+            CPLAssert(oTmpBufferDT.GetNumericDataType() == GDT_Float64);
+            ReadInternal<double>(count, bufferStride, bufferDataType, pDstBuffer,
+                                pTempBuffer, oTmpBufferDT, tmpBufferStrideVector,
+                                bHasMissingValue, dfMissingValue,
+                                bHasFillValue, dfFillValue,
+                                bHasValidMin, dfValidMin,
+                                bHasValidMax, dfValidMax);
+            break;
+
+    }
+ 
+    VSIFree(pTempBuffer);
+
+    return true;
+}
+
+/************************************************************************/
+/*                          IsValidForDT()                              */
+/************************************************************************/
+
+template<typename Type> static bool IsValidForDT(double dfVal)
+{
+    if( std::isnan(dfVal) )
+        return false;
+    if( dfVal < static_cast<double>(std::numeric_limits<Type>::lowest()) )
+        return false;
+    if( dfVal > static_cast<double>(std::numeric_limits<Type>::max()) )
+        return false;
+    return static_cast<double>(static_cast<Type>(dfVal)) == dfVal;
+}
+
+template<> bool IsValidForDT<double>(double)
+{
+    return true;
+}
+
+/************************************************************************/
+/*                              IsNan()                                 */
+/************************************************************************/
+
+template<typename Type> inline bool IsNan(Type)
+{
+    return false;
+}
+
+template<> bool IsNan<double>(double val)
+{
+    return std::isnan(val);
+}
+
+template<> bool IsNan<float>(float val)
+{
+    return std::isnan(val);
+}
+
+/************************************************************************/
+/*                         ReadInternal()                               */
+/************************************************************************/
+
+template<typename Type> void GDALMDArrayMask::ReadInternal(
+                                          const size_t* count,
+                                          const GPtrDiff_t* bufferStride,
+                                          const GDALExtendedDataType& bufferDataType,
+                                          void* pDstBuffer,
+                                          const void* pTempBuffer,
+                                          const GDALExtendedDataType& oTmpBufferDT,
+                                          const std::vector<GPtrDiff_t>& tmpBufferStrideVector,
+                                          bool bHasMissingValue, double dfMissingValue,
+                                          bool bHasFillValue, double dfFillValue,
+                                          bool bHasValidMin, double dfValidMin,
+                                          bool bHasValidMax, double dfValidMax) const
+{
+    const size_t nDims = GetDimensionCount();
+    const size_t nTmpBufferDTSize = oTmpBufferDT.GetSize();
     struct Stack
     {
         size_t       nIters = 0;
@@ -4270,7 +4429,6 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
     size_t dimIdx = 0;
     const size_t nDimsMinus1 = nDims - 1;
     const void* pSrcRawNoDataValue = m_poParent->GetRawNoDataValue();
-    const double dfNoDataValue = m_poParent->GetNoDataValueAsDouble();
     const bool bBufferDataTypeIsDT = bufferDataType == m_dt;
     GByte abyZeroOrOne[2][16]; // 16 is sizeof GDT_CFloat64
     CPLAssert(nBufferDTSize <= 16);
@@ -4282,6 +4440,29 @@ bool GDALMDArrayMask::IRead(const GUInt64* arrayStartIdx,
                                         abyZeroOrOne[flag], bufferDataType);
     }
 
+    const auto castValue = [](bool& bHasVal, double dfVal) -> Type
+    {
+        if( bHasVal )
+        {
+            if( IsValidForDT<Type>(dfVal) )
+            {
+                return static_cast<Type>(dfVal);
+            }
+            else
+            {
+                bHasVal = false;
+            }
+        }
+        return 0;
+    };
+
+    bool bHasNodataValue = pSrcRawNoDataValue != nullptr;
+    const Type nNoDataValue = castValue(bHasNodataValue, m_poParent->GetNoDataValueAsDouble());
+    const Type nMissingValue = castValue(bHasMissingValue, dfMissingValue);
+    const Type nFillValue = castValue(bHasFillValue, dfFillValue);
+    const Type nValidMin = castValue(bHasValidMin, dfValidMin);
+    const Type nValidMax = castValue(bHasValidMax, dfValidMax);
+
 lbl_next_depth:
     if( dimIdx == nDimsMinus1 )
     {
@@ -4292,32 +4473,28 @@ lbl_next_depth:
         while(true)
         {
             GByte flag = 1;
-            // Only valid when bTmpBufferAsDouble is set
-            const double* pSrcDouble = reinterpret_cast<const double*>(src_ptr);
-            if( bTmpBufferAsDouble && std::isnan(*pSrcDouble) )
+            const Type* pSrc = reinterpret_cast<const Type*>(src_ptr);
+            if( IsNan(*pSrc) )
             {
                 flag = 0;
             }
-            else if( pSrcRawNoDataValue &&
-                     (bTmpBufferAsDouble ?
-                        *pSrcDouble == dfNoDataValue :
-                        memcmp(src_ptr, pSrcRawNoDataValue, nTmpBufferDTSize) == 0) )
+            else if( bHasNodataValue && *pSrc == nNoDataValue)
             {
                 flag = 0;
             }
-            else if( bHasMissingValue && *pSrcDouble == dfMissingValue )
+            else if( bHasMissingValue && *pSrc == nMissingValue )
             {
                 flag = 0;
             }
-            else if( bHasFillValue && *pSrcDouble == dfFillValue )
+            else if( bHasFillValue && *pSrc == nFillValue )
             {
                 flag = 0;
             }
-            else if( bHasValidMin && *pSrcDouble < dfValidMin )
+            else if( bHasValidMin && *pSrc < nValidMin )
             {
                 flag = 0;
             }
-            else if( bHasValidMax && *pSrcDouble > dfValidMax )
+            else if( bHasValidMax && *pSrc > nValidMax )
             {
                 flag = 0;
             }
@@ -4356,10 +4533,6 @@ lbl_return_to_caller:
     }
     if( dimIdx > 0 )
         goto lbl_return_to_caller;
-
-
-    VSIFree(pTempBuffer);
-    return true;
 }
 
 /************************************************************************/
@@ -4572,7 +4745,7 @@ public:
             SetMetadataItem(attr->GetName().c_str(), val.c_str());
         }
 
-        // Instanciate bands by iterating over non-XY variables
+        // Instantiate bands by iterating over non-XY variables
         size_t iDim = 0;
 lbl_next_depth:
         if( iDim < nNewDimCount )
@@ -5349,7 +5522,7 @@ std::shared_ptr<GDALMDArray> GDALDimension::GetIndexingVariable() const
  * This is the array, typically one-dimensional, describing the values taken
  * by the dimension.
  *
- * Optionaly implemented by drivers.
+ * Optionally implemented by drivers.
  *
  * Drivers known to implement it: MEM.
  *
@@ -5390,28 +5563,28 @@ struct GDALGroupHS
 {
     std::shared_ptr<GDALGroup> m_poImpl;
 
-    explicit GDALGroupHS(std::shared_ptr<GDALGroup> poGroup): m_poImpl(poGroup) {}
+    explicit GDALGroupHS(const std::shared_ptr<GDALGroup>& poGroup): m_poImpl(poGroup) {}
 };
 
 struct GDALMDArrayHS
 {
     std::shared_ptr<GDALMDArray> m_poImpl;
 
-    explicit GDALMDArrayHS(std::shared_ptr<GDALMDArray> poArray): m_poImpl(poArray) {}
+    explicit GDALMDArrayHS(const std::shared_ptr<GDALMDArray>& poArray): m_poImpl(poArray) {}
 };
 
 struct GDALAttributeHS
 {
     std::shared_ptr<GDALAttribute> m_poImpl;
 
-    explicit GDALAttributeHS(std::shared_ptr<GDALAttribute> poAttr): m_poImpl(poAttr) {}
+    explicit GDALAttributeHS(const std::shared_ptr<GDALAttribute>& poAttr): m_poImpl(poAttr) {}
 };
 
 struct GDALDimensionHS
 {
     std::shared_ptr<GDALDimension> m_poImpl;
 
-    explicit GDALDimensionHS(std::shared_ptr<GDALDimension> poDim): m_poImpl(poDim) {}
+    explicit GDALDimensionHS(const std::shared_ptr<GDALDimension>& poDim): m_poImpl(poDim) {}
 };
 
 /************************************************************************/
@@ -5830,6 +6003,29 @@ GDALMDArrayH GDALGroupOpenMDArray(GDALGroupH hGroup, const char* pszMDArrayName,
 }
 
 /************************************************************************/
+/*                  GDALGroupOpenMDArrayFromFullname()                  */
+/************************************************************************/
+
+/** Open and return a multidimensional array from its fully qualified name.
+ *
+ * This is the same as the C++ method GDALGroup::OpenMDArrayFromFullname().
+ *
+ * @return the array, to be freed with GDALMDArrayRelease(), or nullptr.
+ *
+ * @since GDAL 3.2
+ */
+GDALMDArrayH GDALGroupOpenMDArrayFromFullname(GDALGroupH hGroup, const char* pszFullname,
+                                  CSLConstList papszOptions)
+{
+    VALIDATE_POINTER1( hGroup, __func__, nullptr );
+    VALIDATE_POINTER1( pszFullname, __func__, nullptr );
+    auto array = hGroup->m_poImpl->OpenMDArrayFromFullname(std::string(pszFullname), papszOptions);
+    if( !array )
+        return nullptr;
+    return new GDALMDArrayHS(array);
+}
+
+/************************************************************************/
 /*                        GDALGroupGetGroupNames()                      */
 /************************************************************************/
 
@@ -5873,6 +6069,29 @@ GDALGroupH GDALGroupOpenGroup(GDALGroupH hGroup, const char* pszSubGroupName,
 }
 
 /************************************************************************/
+/*                       GDALGroupOpenMDArrayFromFullname()             */
+/************************************************************************/
+
+/** Open and return a sub-group from its fully qualified name.
+ *
+ * This is the same as the C++ method GDALGroup::OpenGroupFromFullname().
+ *
+ * @return the sub-group, to be freed with GDALGroupRelease(), or nullptr.
+ *
+ * @since GDAL 3.2
+ */
+GDALGroupH GDALGroupOpenGroupFromFullname(GDALGroupH hGroup, const char* pszFullname,
+                                          CSLConstList papszOptions)
+{
+    VALIDATE_POINTER1( hGroup, __func__, nullptr );
+    VALIDATE_POINTER1( pszFullname, __func__, nullptr );
+    auto subGroup = hGroup->m_poImpl->OpenGroupFromFullname(std::string(pszFullname), papszOptions);
+    if( !subGroup )
+        return nullptr;
+    return new GDALGroupHS(subGroup);
+}
+
+/************************************************************************/
 /*                         GDALGroupGetDimensions()                     */
 /************************************************************************/
 
@@ -5888,7 +6107,7 @@ GDALGroupH GDALGroupOpenGroup(GDALGroupH hGroup, const char* pszSubGroupName,
  * @param hGroup Group.
  * @param pnCount Pointer to the number of values returned. Must NOT be NULL.
  * @param papszOptions Driver specific options determining how dimensions
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return an array of *pnCount dimensions.
  */
@@ -5943,7 +6162,7 @@ GDALAttributeH GDALGroupGetAttribute(GDALGroupH hGroup, const char* pszName)
  * @param hGroup Group.
  * @param pnCount Pointer to the number of values returned. Must NOT be NULL.
  * @param papszOptions Driver specific options determining how attributes
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return an array of *pnCount attributes.
  */
@@ -6367,7 +6586,7 @@ GDALAttributeH GDALMDArrayGetAttribute(GDALMDArrayH hArray, const char* pszName)
  * @param hArray Array.
  * @param pnCount Pointer to the number of values returned. Must NOT be NULL.
  * @param papszOptions Driver specific options determining how attributes
- * should be retrieved. Pass nullptr for default behaviour.
+ * should be retrieved. Pass nullptr for default behavior.
  *
  * @return an array of *pnCount attributes.
  */
@@ -7693,6 +7912,7 @@ std::shared_ptr<GDALMDArray> GDALDimensionWeakIndexingVar::GetIndexingVariable()
     return m_poIndexingVariable.lock();
 }
 
+// cppcheck-suppress passedByValue
 bool GDALDimensionWeakIndexingVar::SetIndexingVariable(std::shared_ptr<GDALMDArray> poIndexingVariable)
 {
     m_poIndexingVariable = poIndexingVariable;

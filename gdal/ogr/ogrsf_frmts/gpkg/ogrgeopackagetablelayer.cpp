@@ -811,6 +811,14 @@ OGRErr OGRGeoPackageTableLayer::ReadTableDefinition()
         }
     }
 
+
+    // set names (in upper case) of fields with unique constraint
+    std::set<std::string> uniqueFieldsUC;
+    if( m_bIsTable )
+    {
+        uniqueFieldsUC = SQLGetUniqueFieldUCConstraints(poDb, m_pszTableName);
+    }
+
     /* Use the "PRAGMA TABLE_INFO()" call to get table definition */
     /*  #|name|type|notnull|default|pk */
     /*  0|id|integer|0||1 */
@@ -948,6 +956,12 @@ OGRErr OGRGeoPackageTableLayer::ReadTableDefinition()
                 oField.SetWidth(nMaxWidth);
                 if( bNotNull )
                     oField.SetNullable(FALSE);
+
+                if ( uniqueFieldsUC.find( CPLString( pszName ).toupper() ) != uniqueFieldsUC.end() )
+                {
+                    oField.SetUnique(TRUE);
+                }
+
                 if( pszDefault != nullptr )
                 {
                     int nYear = 0;
@@ -1309,6 +1323,8 @@ OGRErr OGRGeoPackageTableLayer::CreateField( OGRFieldDefn *poField,
                                            nMaxWidth));
         if(  !poField->IsNullable() )
             osCommand += " NOT NULL";
+        if(  poField->IsUnique() )
+            osCommand += " UNIQUE";
         if( poField->GetDefault() != nullptr && !poField->IsDefaultDriverSpecific() )
         {
             osCommand += " DEFAULT ";
@@ -3787,6 +3803,10 @@ CPLString OGRGeoPackageTableLayer::GetColumnsOfCreateTable(const std::vector<OGR
         {
             osSQL += " NOT NULL";
         }
+        if( poFieldDefn->IsUnique() )
+        {
+            osSQL += " UNIQUE";
+        }
         const char* pszDefault = poFieldDefn->GetDefault();
         if( pszDefault != nullptr &&
             (!poFieldDefn->IsDefaultDriverSpecific() ||
@@ -4454,6 +4474,10 @@ OGRErr OGRGeoPackageTableLayer::AlterFieldDefn( int iFieldToAlter,
     {
         oTmpFieldDefn.SetDefault(poNewFieldDefn->GetDefault());
     }
+    if( (nFlagsIn & ALTER_UNIQUE_FLAG) )
+    {
+      oTmpFieldDefn.SetUnique( poNewFieldDefn->IsUnique());
+    }
     std::vector<OGRFieldDefn*> apoFields;
     std::vector<OGRFieldDefn*> apoFieldsOld;
     for( int iField = 0; iField < m_poFeatureDefn->GetFieldCount(); iField++ )
@@ -4712,6 +4736,8 @@ OGRErr OGRGeoPackageTableLayer::AlterFieldDefn( int iFieldToAlter,
                 poFieldDefn->SetNullable(poNewFieldDefn->IsNullable());
             if (nFlagsIn & ALTER_DEFAULT_FLAG)
                 poFieldDefn->SetDefault(poNewFieldDefn->GetDefault());
+            if (nFlagsIn & ALTER_UNIQUE_FLAG)
+              poFieldDefn->SetUnique(poNewFieldDefn->IsUnique());
 
             if( bRunDoSpecialProcessingForColumnCreation )
             {

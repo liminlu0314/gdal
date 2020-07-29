@@ -399,10 +399,15 @@ static void ReportOnLayer( OGRLayer * poLayer, const char *pszWHERE,
                    pszType,
                    poField->GetWidth(),
                    poField->GetPrecision());
+            if( poField->IsUnique() )
+                printf(" UNIQUE");
             if( !poField->IsNullable() )
                 printf(" NOT NULL");
             if( poField->GetDefault() != nullptr )
                 printf(" DEFAULT %s", poField->GetDefault());
+            const char* pszAlias = poField->GetAlternativeNameRef();
+            if( pszAlias != nullptr && pszAlias[0])
+                printf(", alternative name=\"%s\"", pszAlias);
             printf("\n");
         }
     }
@@ -458,11 +463,39 @@ static void RemoveSQLComments(char*& pszSQL)
     CPLString osSQL;
     for( char** papszIter = papszLines; papszIter && *papszIter; ++papszIter )
     {
-        if( !STARTS_WITH(*papszIter, "--") )
+        const char* pszLine = *papszIter;
+        char chQuote = 0;
+        int i = 0;
+        for(; pszLine[i] != '\0'; ++i )
         {
-            osSQL += *papszIter;
-            osSQL += " ";
+            if( chQuote )
+            {
+                if( pszLine[i] == chQuote )
+                {
+                    if( pszLine[i+1] == chQuote )
+                    {
+                        i++;
+                    }
+                    else
+                    {
+                        chQuote = 0;
+                    }
+                }
+            }
+            else if( pszLine[i] == '\'' || pszLine[i] == '"' )
+            {
+                chQuote = pszLine[i];
+            }
+            else if( pszLine[i] == '-' && pszLine[i+1] == '-' )
+            {
+                break;
+            }
         }
+        if( i > 0 )
+        {
+            osSQL.append(pszLine, i);
+        }
+        osSQL += ' ';
     }
     CSLDestroy(papszLines);
     CPLFree(pszSQL);
