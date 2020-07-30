@@ -3,6 +3,8 @@ OBJ	=	postgisrasterdataset.obj postgisrasterrasterband.obj postgisrasterdriver.o
 
 EXTRAFLAGS = -I ../mem -I ../vrt -I$(PG_INC_DIR)
 
+PLUGIN_DLL =	gdal_PostGISRaster.dll
+
 GDAL_ROOT	=	..\..
 
 !INCLUDE $(GDAL_ROOT)\nmake.opt
@@ -12,4 +14,17 @@ default:	$(OBJ)
 
 clean:
 	-del *.obj
+	-del *.dll
+	-del *.exp
+	-del *.lib
+	-del *.manifest
 
+plugin:	$(PLUGIN_DLL)
+
+$(PLUGIN_DLL): $(OBJ)
+	link /dll $(LDEBUG) /out:$(PLUGIN_DLL) $(OBJ) $(GDALLIB) $(PG_LIB)
+	if exist $(PLUGIN_DLL).manifest mt -manifest $(PLUGIN_DLL).manifest -outputresource:$(PLUGIN_DLL);2
+
+plugin-install:
+	-mkdir $(PLUGINDIR)
+	$(INSTALL) $(PLUGIN_DLL) $(PLUGINDIR)

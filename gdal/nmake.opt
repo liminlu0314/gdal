@@ -370,13 +370,13 @@ JPEG12_SUPPORTED = 1
 #ECW_PLATFORM_TOOLSET_DIR = vc141
 #!ENDIF
 
-ECWDIR  =  "E:\GDAL\gdal_need\ERDAS-ECW-JP2-SDK-5.4.0"
-ECWFLAGS = -DECWSDK_VERSION=54 \
-       -I$(ECWDIR)\include \
-       -I$(ECWDIR)\include/NCSECW/api \
-	   -I$(ECWDIR)\include/NCSECW/jp2 \
-       -I$(ECWDIR)\include/NCSECW/ecw
-ECWLIB  =  $(ECWDIR)\lib\vc141\x64\NCSEcw.lib
+#ECWDIR  = 	"E:\GDAL\gdal_need\ERDAS-ECW-JP2-SDK-5.4.0"
+#ECWFLAGS =	-DECWSDK_VERSION=54 \
+#		-I$(ECWDIR)\include \
+#		-I$(ECWDIR)\include/NCSECW/API \
+#		-I$(ECWDIR)\include/NCSECW/JP2 \
+#		-I$(ECWDIR)\include/NCSECW/ECW 
+#ECWLIB  = 	$(ECWDIR)\lib\vc141\x64\NCSEcw.lib
 
 # To build ECW support as a plugin uncomment the following, and make sure
 # to do "nmake /f makefile.vc plugin" in gdal/frmts/ecw and copy the two
