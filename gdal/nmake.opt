@@ -89,7 +89,7 @@ DATADIR = "$(GDAL_HOME)\data"
 # Set this to the installed directory containing python.  If you don't
 # have python just let it point to a directory that does not exist (as now).
 !IFNDEF PYDIR
-PYDIR   =	"C:\Software\Python24"
+PYDIR   =	"C:\Python27amd64"
 !ENDIF
 
 # Set this to the name of the python executable in PYDIR. For example "python_d.exe"
@@ -370,6 +370,14 @@ JPEG12_SUPPORTED = 1
 #ECW_PLATFORM_TOOLSET_DIR = vc141
 #!ENDIF
 
+ECWDIR  =  "E:\GDAL\gdal_need\ERDAS-ECW-JP2-SDK-5.4.0"
+ECWFLAGS = -DECWSDK_VERSION=54 \
+       -I$(ECWDIR)\include \
+       -I$(ECWDIR)\include/NCSECW/api \
+	   -I$(ECWDIR)\include/NCSECW/jp2 \
+       -I$(ECWDIR)\include/NCSECW/ecw
+ECWLIB  =  $(ECWDIR)\lib\vc141\x64\NCSEcw.lib
+
 # To build ECW support as a plugin uncomment the following, and make sure
 # to do "nmake /f makefile.vc plugin" in gdal/frmts/ecw and copy the two
 # resulting DLLs to an appropriate place.
@@ -606,9 +614,9 @@ PCIDSK_SETTING=INTERNAL
 #PCIDSK_LIB=\warmerda\pcidsk\src\pcidsk.lib
 
 # PostGIS Libraries
-#PG_PLUGIN = YES
-#PG_INC_DIR = "C:\Program Files\PostgreSQL\9.3\include"
-#PG_LIB = "C:\Program Files\PostgreSQL\9.3\lib\libpq.lib" wsock32.lib
+PG_PLUGIN = YES
+PG_INC_DIR = "E:\GDAL\gdal_need\libpq\include"
+PG_LIB = "E:\GDAL\gdal_need\libpq\lib\libpq.lib" wsock32.lib
 
 # MySQL Libraries
 # NOTE: Need /MT instead of /MD, also enable /EHsc switch.
