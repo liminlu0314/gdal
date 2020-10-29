@@ -803,6 +803,33 @@ def test_tiff_read_geomatrix():
     gdal.SetConfigOption('GTIFF_POINT_GEO_IGNORE', None)
 
 ###############################################################################
+# Test reading a GeoTIFF file with tiepoints in PixelIsPoint format.
+
+
+def test_tiff_read_tiepoints_pixelispoint():
+
+    ds = gdal.Open('data/byte_gcp_pixelispoint.tif')
+    assert ds.GetMetadataItem('AREA_OR_POINT') == 'Point'
+    assert ds.GetGCPCount() == 4
+    gcp = ds.GetGCPs()[0]
+    assert (gcp.GCPPixel == pytest.approx(0.5, abs=1e-5) and \
+       gcp.GCPLine == pytest.approx(0.5, abs=1e-5) and \
+       gcp.GCPX == pytest.approx(-180, abs=1e-5) and \
+       gcp.GCPY == pytest.approx(90, abs=1e-5) and \
+       gcp.GCPZ == pytest.approx(0, abs=1e-5))
+
+    with gdaltest.config_option('GTIFF_POINT_GEO_IGNORE', 'YES'):
+        ds = gdal.Open('data/byte_gcp_pixelispoint.tif')
+        assert ds.GetMetadataItem('AREA_OR_POINT') == 'Point'
+        assert ds.GetGCPCount() == 4
+        gcp = ds.GetGCPs()[0]
+        assert (gcp.GCPPixel == pytest.approx(0, abs=1e-5) and \
+        gcp.GCPLine == pytest.approx(0, abs=1e-5) and \
+        gcp.GCPX == pytest.approx(-180, abs=1e-5) and \
+        gcp.GCPY == pytest.approx(90, abs=1e-5) and \
+        gcp.GCPZ == pytest.approx(0, abs=1e-5))
+
+###############################################################################
 # Test that we don't crash when reading a TIFF with corrupted GeoTIFF tags
 
 
@@ -3330,9 +3357,8 @@ def test_tiff_read_cog_with_mask_vsicurl():
     try:
         src_ds = gdal.GetDriverByName('GTIFF').Create(in_filename, 1024, 1024, options = ['BIGTIFF=YES', 'TILED=YES', 'BLOCKXSIZE=16', 'BLOCKYSIZE=16', 'SPARSE_OK=YES'])
         src_ds.BuildOverviews('NEAR', [256])
-        with gdaltest.config_option('GDAL_TIFF_INTERNAL_MASK', 'YES'):
+        with gdaltest.config_options({'GDAL_TIFF_INTERNAL_MASK': 'YES', 'GDAL_TIFF_DEFLATE_SUBCODEC': 'ZLIB'}):
             src_ds.CreateMaskBand(gdal.GMF_PER_DATASET)
-        with gdaltest.config_option('GDAL_TIFF_INTERNAL_MASK', 'YES'):
             gdal.GetDriverByName('GTIFF').CreateCopy(cog_filename, src_ds, options = ['BIGTIFF=YES', 'TILED=YES', 'BLOCKXSIZE=16', 'BLOCKYSIZE=16', 'COPY_SRC_OVERVIEWS=YES', 'COMPRESS=LZW'])
 
         filesize = gdal.VSIStatL(cog_filename).size
@@ -3462,3 +3488,22 @@ def test_tiff_read_geodetic_tiff_grid():
 
     ds = gdal.Open('data/test_hgrid_with_subgrid.tif')
     assert ds.GetSubDatasets()[0][1] == 'Page 1 (10P x 10L x 2B): CAwest'
+
+
+
+###############################################################################
+# Test fix for https://github.com/OSGeo/gdal/issues/2903
+# related to precomposed vs decomposed UTF-8 filenames on MacOSX
+
+def test_tiff_read_utf8_encoding_issue_2903():
+
+    precomposed_utf8 = b'\xc3\xa4'.decode('utf-8')
+    tmp_tif_filename = 'tmp/%s.tif' % precomposed_utf8
+    tmp_tfw_filename = 'tmp/%s.tfw' % precomposed_utf8
+    open(tmp_tif_filename, 'wb').write(open('data/byte_nogeoref.tif', 'rb').read())
+    open(tmp_tfw_filename, 'wb').write(open('data/byte_nogeoref.tfw', 'rb').read())
+    ds = gdal.Open(tmp_tif_filename)
+    assert ds.GetGeoTransform()[0] != 0
+    ds = None
+    os.unlink(tmp_tif_filename)
+    os.unlink(tmp_tfw_filename)

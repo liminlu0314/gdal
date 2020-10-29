@@ -833,6 +833,7 @@ OGRFeatureH CPL_DLL GDALDatasetGetNextFeature( GDALDatasetH hDS,
 int    CPL_DLL GDALDatasetTestCapability( GDALDatasetH, const char * );
 OGRLayerH CPL_DLL GDALDatasetExecuteSQL( GDALDatasetH, const char *,
                                      OGRGeometryH, const char * );
+OGRErr CPL_DLL GDALDatasetAbortSQL( GDALDatasetH );
 void   CPL_DLL GDALDatasetReleaseResultSet( GDALDatasetH, OGRLayerH );
 OGRStyleTableH CPL_DLL GDALDatasetGetStyleTable( GDALDatasetH );
 void   CPL_DLL GDALDatasetSetStyleTableDirectly( GDALDatasetH, OGRStyleTableH );
@@ -840,6 +841,7 @@ void   CPL_DLL GDALDatasetSetStyleTable( GDALDatasetH, OGRStyleTableH );
 OGRErr CPL_DLL GDALDatasetStartTransaction(GDALDatasetH hDS, int bForce);
 OGRErr CPL_DLL GDALDatasetCommitTransaction(GDALDatasetH hDS);
 OGRErr CPL_DLL GDALDatasetRollbackTransaction(GDALDatasetH hDS);
+void CPL_DLL GDALDatasetClearStatistics(GDALDatasetH hDS);
 
 /* ==================================================================== */
 /*      GDALRasterBand ... one band/channel in a dataset.               */
@@ -1512,6 +1514,9 @@ int CPL_DLL GDALMDArrayWrite(GDALMDArrayH hArray,
                             const void* pSrcBuffer,
                             const void* psrcBufferAllocStart,
                             size_t nSrcBufferllocSize);
+int CPL_DLL GDALMDArrayAdviseRead(GDALMDArrayH hArray,
+                                  const GUInt64* arrayStartIdx,
+                                  const size_t* count);
 GDALAttributeH CPL_DLL GDALMDArrayGetAttribute(GDALMDArrayH hArray, const char* pszName) CPL_WARN_UNUSED_RESULT;
 GDALAttributeH CPL_DLL *GDALMDArrayGetAttributes(GDALMDArrayH hArray, size_t* pnCount, CSLConstList papszOptions) CPL_WARN_UNUSED_RESULT;
 GDALAttributeH CPL_DLL GDALMDArrayCreateAttribute(GDALMDArrayH hArray,
@@ -1546,6 +1551,18 @@ GDALMDArrayH CPL_DLL GDALMDArrayGetUnscaled(GDALMDArrayH hArray);
 GDALMDArrayH CPL_DLL GDALMDArrayGetMask(GDALMDArrayH hArray, CSLConstList papszOptions);
 GDALDatasetH CPL_DLL GDALMDArrayAsClassicDataset(GDALMDArrayH hArray,
                                                  size_t iXDim, size_t iYDim);
+CPLErr CPL_DLL GDALMDArrayGetStatistics(
+    GDALMDArrayH hArray, GDALDatasetH, int bApproxOK, int bForce,
+    double *pdfMin, double *pdfMax,
+    double *pdfMean, double *pdfStdDev,
+    GUInt64* pnValidCount,
+    GDALProgressFunc pfnProgress, void *pProgressData );
+int CPL_DLL GDALMDArrayComputeStatistics( GDALMDArrayH hArray, GDALDatasetH,
+                                    int bApproxOK,
+                                    double *pdfMin, double *pdfMax,
+                                    double *pdfMean, double *pdfStdDev,
+                                    GUInt64* pnValidCount,
+                                    GDALProgressFunc, void *pProgressData );
 
 void CPL_DLL GDALAttributeRelease(GDALAttributeH hAttr);
 void CPL_DLL GDALReleaseAttributes(GDALAttributeH* attributes, size_t nCount);

@@ -1964,7 +1964,7 @@ const char *OGR_G_GetGeometryName( OGRGeometryH hGeom )
  * This function is the same as the CPP method OGRGeometry::clone().
  *
  * @param hGeom handle on the geometry to clone from.
- * @return an handle on the copy of the geometry with the spatial
+ * @return a handle on the copy of the geometry with the spatial
  * reference system as the original.
  */
 
@@ -4860,7 +4860,10 @@ OGRGeometry::Crosses( UNUSED_PARAMETER const OGRGeometry *poOtherGeom ) const
 
         sfcgal_geometry_t *poOther = OGRGeometry::OGRexportToSFCGAL(poOtherGeom);
         if (poOther == nullptr)
+        {
+            sfcgal_geometry_delete(poThis);
             return FALSE;
+        }
 
         int res = sfcgal_geometry_intersects_3d(poThis, poOther);
 

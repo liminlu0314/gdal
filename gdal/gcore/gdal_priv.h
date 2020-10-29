@@ -66,6 +66,8 @@ class GDALAsyncReader;
 #include "cpl_multiproc.h"
 #include "cpl_atomic_ops.h"
 
+#include <stdarg.h>
+
 #include <cmath>
 #include <cstdint>
 #include <iterator>
@@ -350,6 +352,10 @@ class CPL_DLL GDALDataset : public GDALMajorObject
 
     CPL_INTERNAL void AddToDatasetOpenList();
 
+    CPL_INTERNAL static void ReportErrorV(
+                                     const char* pszDSName,
+                                     CPLErr eErrClass, CPLErrorNum err_no,
+                                     const char *fmt, va_list args);
   protected:
 //! @cond Doxygen_Suppress
     GDALDriver  *poDriver = nullptr;
@@ -606,6 +612,10 @@ class CPL_DLL GDALDataset : public GDALMajorObject
 
 #ifndef DOXYGEN_XML
     void ReportError(CPLErr eErrClass, CPLErrorNum err_no, const char *fmt, ...)  CPL_PRINT_FUNC_FORMAT (4, 5);
+
+    static void ReportError(const char* pszDSName,
+                            CPLErr eErrClass, CPLErrorNum err_no,
+                            const char *fmt, ...)  CPL_PRINT_FUNC_FORMAT (4, 5);
 #endif
 
     char ** GetMetadata(const char * pszDomain = "") override;
@@ -620,6 +630,8 @@ class CPL_DLL GDALDataset : public GDALMajorObject
 #endif
 
     char **GetMetadataDomainList() override;
+
+    virtual void ClearStatistics();
 
     /** Convert a GDALDataset* to a GDALDatasetH.
      * @since GDAL 2.3
@@ -789,6 +801,7 @@ private:
                                     OGRGeometry *poSpatialFilter,
                                     const char *pszDialect );
     virtual void        ReleaseResultSet( OGRLayer * poResultsSet );
+    virtual OGRErr      AbortSQL( );
 
     int                 GetRefCount() const;
     int                 GetSummaryRefCount() const;
@@ -1990,11 +2003,12 @@ public:
     virtual bool CopyFrom(const std::shared_ptr<GDALGroup>& poDstRootGroup,
                           GDALDataset* poSrcDS,
                           const std::shared_ptr<GDALGroup>& poSrcGroup,
-                            bool bStrict,
-                            GUInt64& nCurCost,
-                            const GUInt64 nTotalCost,
-                            GDALProgressFunc pfnProgress,
-                            void * pProgressData);
+                          bool bStrict,
+                          GUInt64& nCurCost,
+                          const GUInt64 nTotalCost,
+                          GDALProgressFunc pfnProgress,
+                          void * pProgressData,
+                          CSLConstList papszOptions = nullptr);
 
     virtual CSLConstList GetStructuralInfo() const;
 
@@ -2338,9 +2352,19 @@ class CPL_DLL GDALMDArray: virtual public GDALAbstractMDArray, public GDALIHasAt
         return atInternal(indices, tail...);
     }
 
+    bool SetStatistics( GDALDataset* poDS,
+                        bool bApproxStats,
+                        double dfMin, double dfMax,
+                        double dfMean, double dfStdDev,
+                        GUInt64 nValidCount );
+
 protected:
 //! @cond Doxygen_Suppress
     GDALMDArray(const std::string& osParentName, const std::string& osName);
+
+    virtual bool IAdviseRead(const GUInt64* arrayStartIdx,
+                             const size_t* count) const;
+
 //! @endcond
 
 public:
@@ -2413,6 +2437,23 @@ public:
     virtual std::shared_ptr<GDALMDArray> GetMask(CSLConstList papszOptions) const;
 
     virtual GDALDataset* AsClassicDataset(size_t iXDim, size_t iYDim) const;
+
+    virtual CPLErr GetStatistics( GDALDataset* poDS,
+                                  bool bApproxOK, bool bForce,
+                                  double *pdfMin, double *pdfMax,
+                                  double *pdfMean, double *padfStdDev,
+                                  GUInt64* pnValidCount,
+                                  GDALProgressFunc pfnProgress, void *pProgressData );
+
+    virtual bool ComputeStatistics( GDALDataset* poDS,
+                                    bool bApproxOK,
+                                    double *pdfMin, double *pdfMax,
+                                    double *pdfMean, double *pdfStdDev,
+                                    GUInt64* pnValidCount,
+                                    GDALProgressFunc, void *pProgressData );
+
+    bool AdviseRead(const GUInt64* arrayStartIdx,
+                    const size_t* count) const;
 
 //! @cond Doxygen_Suppress
     static constexpr GUInt64 COPY_COST = 1000;
@@ -2757,6 +2798,9 @@ void GDALSerializeOpenOptionsToXML( CPLXMLNode* psParentNode, char** papszOpenOp
 char** GDALDeserializeOpenOptionsFromXML( CPLXMLNode* psParentNode );
 
 int GDALCanFileAcceptSidecarFile(const char* pszFilename);
+
+bool GDALCanReliablyUseSiblingFileList(const char* pszFilename);
+
 //! @endcond
 
 #endif /* ndef GDAL_PRIV_H_INCLUDED */

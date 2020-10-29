@@ -944,6 +944,7 @@ void *OGRSQLiteBaseDataSource::GetInternalHandle( const char * pszKey )
     return nullptr;
 }
 
+
 /************************************************************************/
 /*                               Create()                               */
 /************************************************************************/
@@ -1537,6 +1538,13 @@ int OGRSQLiteDataSource::Open( GDALOpenInfo* poOpenInfo)
         return OpenRasterSubDataset( pszNewName );
     }
 #endif
+
+    const char* pszPreludeStatements = CSLFetchNameValue(papszOpenOptions, "PRELUDE_STATEMENTS");
+    if( pszPreludeStatements )
+    {
+        if( SQLCommand(hDB, pszPreludeStatements) != OGRERR_NONE )
+            return FALSE;
+    }
 
 /* -------------------------------------------------------------------- */
 /*      If we have a GEOMETRY_COLUMNS tables, initialize on the basis   */
@@ -3773,4 +3781,14 @@ void OGRSQLiteBaseDataSource::SetEnvelopeForSQL(const CPLString& osSQL,
                                             const OGREnvelope& oEnvelope)
 {
     oMapSQLEnvelope[osSQL] = oEnvelope;
+}
+
+/************************************************************************/
+/*                         AbortSQL()                                   */
+/************************************************************************/
+
+OGRErr OGRSQLiteBaseDataSource::AbortSQL()
+{
+    sqlite3_interrupt( hDB );
+    return OGRERR_NONE;
 }

@@ -1166,6 +1166,58 @@ fi
 AC_SUBST(LIBZ_SETTING,$LIBZ_SETTING)
 
 dnl ---------------------------------------------------------------------------
+dnl Check for libdeflate.
+dnl ---------------------------------------------------------------------------
+
+LIBDEFLATE_SETTING=no
+
+AC_ARG_WITH(libdeflate,
+            AS_HELP_STRING([--with-libdeflate],
+                            [enable libdeflate usage (optional for faster Deflate support (still requires zlib) (ARG=yes/no/prefix), enabled by default)]),,)
+
+if test "$with_libdeflate" != "no" ; then
+
+  if test "$with_libdeflate" != "" -a "$with_libdeflate" != "yes"; then
+    AC_CHECK_LIB(deflate, libdeflate_zlib_decompress, [libdeflate_lib=yes], [libdeflate_lib=no],-L$with_libdeflate/lib)
+  else
+    AC_CHECK_LIB(deflate, libdeflate_zlib_decompress, [libdeflate_lib=yes], [libdeflate_lib=no])
+  fi
+
+  if test "$libdeflate_lib" = "no" -a "$with_libdeflate" = "yes"; then
+    AC_MSG_ERROR([libdeflate library not found])
+  fi
+
+  if test "$with_libdeflate" != "" -a "$with_libdeflate" != "yes"; then
+    if test -r "$with_libdeflate/include/libdeflate.h" ; then
+      libdeflate_h=yes
+    else
+      libdeflate_h=no
+    fi
+  else
+    AC_CHECK_HEADER(libdeflate.h, [libdeflate_h=yes], [libdeflate_h=no])
+  fi
+  if test "$libdeflate_h" = "no" -a "$with_libdeflate" = "yes"; then
+    AC_MSG_ERROR([libdeflate headers not found])
+  fi
+
+  if test "$libdeflate_lib" = "yes" -a "$libdeflate_h" = "yes" ; then
+    LIBDEFLATE_SETTING=yes
+  fi
+
+fi
+
+if test "$LIBDEFLATE_SETTING" = "yes" ; then
+  if test "$with_libdeflate" != "" -a "$with_libdeflate" != "yes"; then
+    EXTRA_INCLUDES="-I$with_libdeflate/include $EXTRA_INCLUDES"
+    LIBS="-L$with_libdeflate/lib -ldeflate $LIBS"
+  else
+    LIBS="-ldeflate $LIBS"
+  fi
+fi
+
+AC_SUBST(LIBDEFLATE_SETTING,$LIBDEFLATE_SETTING)
+
+dnl ---------------------------------------------------------------------------
 dnl Check for iconv/libiconv.
 dnl A rationale for this macro is described in "GNU `gettext' utilities"
 dnl manual at
@@ -1224,13 +1276,6 @@ if test "x${with_libtiff}" = "xyes" -o "x${with_libtiff}" = "x" ; then
 
   dnl Only automatically pick up the external libtiff if it is >= 4.0.
   AC_CHECK_LIB(tiff,TIFFScanlineSize64,TIFF_SETTING=external HAVE_BIGTIFF=yes,TIFF_SETTING=internal HAVE_BIGTIFF=yes,)
-
-  if test "$TIFF_SETTING" = "external" ; then
-    dnl Cygwin takes a somewhat restrictive view of what should be exported
-    dnl from the dll, so don't use the external library if missing semi-private
-    dnl functions.
-    AC_CHECK_LIB(tiff,_TIFFsetDoubleArray,TIFF_SETTING=external,TIFF_SETTING=internal,)
-  fi
 
   if test "$TIFF_SETTING" = "external" ; then
     LIBS="-ltiff $LIBS"
@@ -1312,117 +1357,15 @@ AC_SUBST(CURL_INC,    $CURL_INC)
 AC_SUBST(CURL_LIB,    $CURL_LIB)
 
 dnl ---------------------------------------------------------------------------
-dnl Check for SpatiaLite.
-dnl ---------------------------------------------------------------------------
-
-AC_MSG_CHECKING(for spatialite)
-
-AC_ARG_WITH(spatialite,
-    [  --with-spatialite=ARG Include SpatiaLite support (ARG=no(default), yes, dlopen (only supported for Spatialite >= 4.1.2) or path)],
-    ,,)
-
-AC_ARG_WITH(spatialite-soname,
-    [  --with-spatialite-soname=ARG Spatialite shared object name (e.g. libspatialite.so), only used if --with-spatialite=dlopen],
-    ,,)
-
-HAVE_SPATIALITE=no
-SPATIALITE_AMALGAMATION=no
-
-if test -z "$with_spatialite" -o "$with_spatialite" = "no"; then
-    AC_MSG_RESULT(disabled)
-elif test "$with_spatialite" = "yes"; then
-    AC_CHECK_HEADERS(sqlite3.h)
-    if test "$ac_cv_header_sqlite3_h" = "yes"; then
-        AC_MSG_CHECKING([for spatialite.h in /usr/include or /usr/local/include])
-        if test -f "/usr/include/spatialite.h" -o -f "/usr/local/include/spatialite.h"; then
-            AC_MSG_RESULT(found)
-            AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-lsqlite3)
-            if test "$SPATIALITE_INIT_FOUND" = "yes"; then
-                HAVE_SPATIALITE=yes
-                SPATIALITE_LIBS="-lspatialite -lsqlite3"
-                LIBS="$LIBS $SPATIALITE_LIBS"
-                HAVE_SQLITE3=yes
-            fi
-        else
-            AC_MSG_RESULT(not found : spatialite support disabled)
-        fi
-    fi
-elif test "$with_spatialite" = "dlopen"; then
-  HAVE_SPATIALITE=dlopen
-  AC_MSG_RESULT(dlopen)
-
-  if test "$with_spatialite_soname" != ""; then
-      SPATIALITE_SONAME="$with_spatialite_soname"
-  else
-      SPATIALITE_SONAME="spatialite.so"
-  fi
-else
-    AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-L$with_spatialite/lib -lspatialite)
-    if test -f "$with_spatialite/include/spatialite.h" -a \
-        -f "$with_spatialite/include/spatialite/sqlite3.h" -a \
-        "$SPATIALITE_INIT_FOUND" = "yes"; then
-
-        AC_MSG_RESULT(enabled)
-        HAVE_SPATIALITE=yes
-        SPATIALITE_AMALGAMATION=yes
-
-        # SpatiaLite amalgamation availability implies SQLite availability
-        # Caution : don't include the include/spatialite subdir in the include dir
-        # as there's a spatialite.h file in it, which we don't want to include.
-        # We want to include include/spatialite.h instead !
-        SQLITE3_CFLAGS="-I$with_spatialite/include"
-        SPATIALITE_LIBS="-L$with_spatialite/lib -lspatialite"
-        LIBS="$LIBS $SPATIALITE_LIBS"
-        HAVE_SQLITE3=yes
-
-    elif test -f "$with_spatialite/include/spatialite.h" -a \
-        "$SPATIALITE_INIT_FOUND" = "yes"; then
-
-        SQLITE3_REQ_VERSION="3.0.0"
-        AX_LIB_SQLITE3($SQLITE3_REQ_VERSION)
-
-        if test "$HAVE_SQLITE3" = "yes"; then
-            SPATIALITE_INC="-I$with_spatialite/include"
-            HAVE_SPATIALITE=yes
-            SPATIALITE_LIBS="-L$with_spatialite/lib -lspatialite"
-            LIBS="$SQLITE3_LDFLAGS $LIBS $SPATIALITE_LIBS"
-            AC_MSG_RESULT(spatialite enabled)
-        else
-            AC_MSG_RESULT(spatialite disabled)
-        fi
-    else
-        AC_MSG_RESULT(disabled)
-    fi
-fi
-
-if test "$HAVE_SPATIALITE" = "yes"; then
-    ax_save_LIBS="${LIBS}"
-    LIBS="$SPATIALITE_LIBS"
-    AC_CHECK_LIB(spatialite,spatialite_target_cpu,SPATIALITE_412_OR_LATER=yes,SPATIALITE_412_OR_LATER=no)
-    LIBS="${ax_save_LIBS}"
-fi
-
-AC_SUBST([HAVE_SPATIALITE], $HAVE_SPATIALITE)
-AC_SUBST([SPATIALITE_SONAME], $SPATIALITE_SONAME)
-AC_SUBST([SPATIALITE_INC], $SPATIALITE_INC)
-AC_SUBST([SPATIALITE_AMALGAMATION], $SPATIALITE_AMALGAMATION)
-AC_SUBST([SPATIALITE_412_OR_LATER], $SPATIALITE_412_OR_LATER)
-
-dnl ---------------------------------------------------------------------------
-dnl Check for SQLite (only if SpatiaLite is not detected).
+dnl Check for SQLite
 dnl Proj depends on it so it must appear before.
 dnl ---------------------------------------------------------------------------
 
-if test "${HAVE_SPATIALITE}" = "no" -o "${HAVE_SPATIALITE}" = "dlopen" ; then
-    SQLITE3_REQ_VERSION="3.0.0"
-    AX_LIB_SQLITE3($SQLITE3_REQ_VERSION)
-
-    if test "$HAVE_SQLITE3" = "yes"; then
-        LIBS="$SQLITE3_LDFLAGS $LIBS"
-    fi
-fi
+SQLITE3_REQ_VERSION="3.0.0"
+AX_LIB_SQLITE3($SQLITE3_REQ_VERSION)
 
 if test "$HAVE_SQLITE3" = "yes"; then
+    LIBS="$SQLITE3_LDFLAGS $LIBS"
     AC_CHECK_LIB(sqlite3,sqlite3_column_table_name,SQLITE_HAS_COLUMN_METADATA=yes,SQLITE_HAS_COLUMN_METADATA=no,$LIBS)
 fi
 
@@ -1548,6 +1491,79 @@ fi
 AC_SUBST(PROJ_INCLUDE)
 
 dnl ---------------------------------------------------------------------------
+dnl Check for SpatiaLite.
+dnl ---------------------------------------------------------------------------
+
+AC_MSG_CHECKING(for spatialite)
+
+AC_ARG_WITH(spatialite,
+    [  --with-spatialite=ARG Include SpatiaLite support (ARG=no(default), yes, dlopen (only supported for Spatialite >= 4.1.2) or path)],
+    ,,)
+
+AC_ARG_WITH(spatialite-soname,
+    [  --with-spatialite-soname=ARG Spatialite shared object name (e.g. libspatialite.so), only used if --with-spatialite=dlopen],
+    ,,)
+
+HAVE_SPATIALITE=no
+
+if test -z "$with_spatialite" -o "$with_spatialite" = "no"; then
+    AC_MSG_RESULT(disabled)
+elif test "$with_spatialite" = "yes"; then
+    AC_CHECK_HEADERS(sqlite3.h)
+    if test "$ac_cv_header_sqlite3_h" = "yes"; then
+        AC_MSG_CHECKING([for spatialite.h in /usr/include or /usr/local/include])
+        if test -f "/usr/include/spatialite.h" -o -f "/usr/local/include/spatialite.h"; then
+            AC_MSG_RESULT(found)
+            AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-lsqlite3)
+            if test "$SPATIALITE_INIT_FOUND" = "yes"; then
+                HAVE_SPATIALITE=yes
+                SPATIALITE_LIBS="-lspatialite -lsqlite3"
+                LIBS="$LIBS $SPATIALITE_LIBS"
+                HAVE_SQLITE3=yes
+            fi
+        else
+            AC_MSG_RESULT(not found : spatialite support disabled)
+        fi
+    fi
+elif test "$with_spatialite" = "dlopen"; then
+  HAVE_SPATIALITE=dlopen
+  AC_MSG_RESULT(dlopen)
+
+  if test "$with_spatialite_soname" != ""; then
+      SPATIALITE_SONAME="$with_spatialite_soname"
+  else
+      SPATIALITE_SONAME="spatialite.so"
+  fi
+else
+    AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-L$with_spatialite/lib -lspatialite)
+
+    if test -f "$with_spatialite/include/spatialite.h" -a \
+        "$SPATIALITE_INIT_FOUND" = "yes"; then
+
+        if test "$HAVE_SQLITE3" = "yes"; then
+            SPATIALITE_INC="-I$with_spatialite/include"
+            HAVE_SPATIALITE=yes
+            SPATIALITE_LIBS="-L$with_spatialite/lib -lspatialite"
+            LIBS="$SQLITE3_LDFLAGS $LIBS $SPATIALITE_LIBS"
+            AC_MSG_RESULT(spatialite enabled)
+        else
+            AC_MSG_RESULT(spatialite disabled)
+        fi
+    else
+        AC_MSG_RESULT(disabled)
+    fi
+fi
+
+if test "$HAVE_SPATIALITE" = "yes"; then
+    AC_CHECK_LIB(spatialite,spatialite_target_cpu,SPATIALITE_412_OR_LATER=yes,SPATIALITE_412_OR_LATER=no)
+fi
+
+AC_SUBST([HAVE_SPATIALITE], $HAVE_SPATIALITE)
+AC_SUBST([SPATIALITE_SONAME], $SPATIALITE_SONAME)
+AC_SUBST([SPATIALITE_INC], $SPATIALITE_INC)
+AC_SUBST([SPATIALITE_412_OR_LATER], $SPATIALITE_412_OR_LATER)
+
+dnl ---------------------------------------------------------------------------
 dnl Check if liblzma is available.
 dnl ---------------------------------------------------------------------------
 
@@ -1617,7 +1633,7 @@ OGRFORMATS_DISABLED=
 AC_DEFUN([INTERNAL_FORMATS],[aaigrid adrg aigrid airsar arg blx bmp bsb cals ceos ceos2 coasp cosar ctg dimap dted e00grid elas envisat ers esric fit gff gsg gxf hf2 idrisi ignfheightasciigrid ilwis ingr iris iso8211 jaxapalsar jdem kmlsuperoverlay l1b leveller map mrf msgn ngsgeoid nitf northwood pds prf r raw rmf rs2 safe saga sdts sentinel2 sgi sigdem srtmhgt terragen tga til tsx usgsdem xpm xyz zmap])
 AC_DEFUN([INTERNAL_OPT_FORMATS],[grib ozi pdf rik])
 AC_DEFUN([INTERNAL_DRIVERS],[aeronavfaa arcgen avc bna cad csv dgn dxf edigeo flatgeobuf geoconcept georss gml gmt gpsbabel gpx gtm htf jml mapml mvt ntf openair openfilegdb pgdump rec s57 segukooa segy selafin shape sua svg sxf tiger vdv wasp xplane])dnl
-AC_DEFUN([CURL_FORMATS],[eeda plmosaic rda wcs wms wmts daas])dnl
+AC_DEFUN([CURL_FORMATS],[eeda plmosaic rda wcs wms wmts daas ogcapi])dnl
 AC_DEFUN([CURL_DRIVERS],[amigocloud carto cloudant couchdb csw elastic ngw plscenes wfs])dnl
 AC_DEFUN([SQLITE_FORMATS],[rasterlite mbtiles])dnl
 AC_DEFUN([SQLITE_DRIVERS],[gpkg vfk osm])dnl
@@ -2338,7 +2354,7 @@ elif test "$with_jpeg" = "yes" -o "$with_jpeg" = "" ; then
     echo '#include <stdio.h>' >> conftest.c
     echo '#include "jpeglib.h"' >> conftest.c
     echo 'int main() { jpeg_component_info *comptr=0; int i; i = comptr->width_in_blocks; }' >> conftest.c
-    if test -z "`${CC} -o conftest conftest.c 2>&1`" ; then
+    if test -z "`${CC} ${CPPFLAGS} ${CFLAGS} -c conftest.c 2>&1`" ; then
       AC_MSG_RESULT([yes])
     else
       AC_MSG_RESULT([no])
@@ -2397,6 +2413,14 @@ if test "$with_charls" = "yes" -o "$with_charls" = "" ; then
     if test "$HAVE_CHARLS" = "yes"; then
         LIBS="-lcharls $LIBS"
         CHARLS_INC="-DCHARLS_2_1"
+    else
+        AC_LANG_PUSH([C++])
+        AC_CHECK_LIB(CharLS,JpegLsDecode,HAVE_CHARLS=yes)
+        AC_LANG_POP([C++])
+        if test "$HAVE_CHARLS" = "yes"; then
+            LIBS="-lCharLS $LIBS"
+            CHARLS_INC="-DCHARLS_2_1"
+        fi
     fi
   else
     dnl CharLS 1.x
@@ -4387,14 +4411,30 @@ else
         HAVE_TEIGHA=yes
         TEIGHA_PLT=$with_teigha_plt
         LIBS="${LIBS} ${TEIGHA_DIR}/bin/${TEIGHA_PLT}/TG_Db.tx"
+        if test -f "${TEIGHA_DIR}/bin/${TEIGHA_PLT}/TD_DbEntities.tx"; then
+            LIBS="${LIBS} ${TEIGHA_DIR}/bin/${TEIGHA_PLT}/TD_DbEntities.tx"
+            LIBS="${LIBS} ${TEIGHA_DIR}/lib/${TEIGHA_PLT}/libTD_DrawingsExamplesCommon.a"
+        fi
         LIBS="${LIBS} ${TEIGHA_DIR}/lib/${TEIGHA_PLT}/libTG_ExamplesCommon.a"
         LIBS="${LIBS} ${TEIGHA_DIR}/lib/${TEIGHA_PLT}/libTD_ExamplesCommon.a"
         LIBS="${LIBS} ${TEIGHA_DIR}/lib/${TEIGHA_PLT}/libTD_Key.a"
         LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Db"
+        if test -f "${TEIGHA_DIR}/bin/${TEIGHA_PLT}/libTD_DbCore.*"; then
+            LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_DbCore"
+        fi
         LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_DbRoot"
+        LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Gi"
+        LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_SpatialIndex"
         LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Root"
         LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Ge"
+        if test -f "${TEIGHA_DIR}/bin/${TEIGHA_PLT}/libTD_Zlib.*"; then
+            LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Zlib"
+        fi
         LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -lTD_Alloc"
+        LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -loless"
+        if test -f "${TEIGHA_DIR}/bin/${TEIGHA_PLT}/liblibcrypto.*"; then
+            LIBS="${LIBS} -L${TEIGHA_DIR}/bin/${TEIGHA_PLT} -llibcrypto"
+        fi
         if test -f "${TEIGHA_DIR}/bin/${TEIGHA_PLT}/libTD_Db.so"; then
             TEIGHA_CPPFLAGS="-D_TOOLKIT_IN_DLL_"
         fi
@@ -4430,7 +4470,7 @@ else
     LIBS_CPPIF="-L${with_idb}/lib/c++ -lifc++"
 
     IDB_INC="-I${with_idb}/incl/ -I${with_idb}/incl/dmi -I${with_idb}/incl/c++"
-    IDB_LIB="${LIBS_DIRS} ${LIBS_ESQL} ${LIBS_LIBMI} ${LIBS_CPPIF}"
+    IDB_LIB="${LIBS_CPPIF} ${LIBS_LIBMI} ${LIBS_DIRS} ${LIBS_ESQL}"
 
     ax_save_LIBS="${LIBS}"
     LIBS="${IDB_LIB} -ldl -lcrypt"
@@ -4450,80 +4490,6 @@ fi
 AC_SUBST(HAVE_IDB,${HAVE_IDB})
 AC_SUBST(IDB_INC,${IDB_INC})
 AC_SUBST(IDB_LIB,${IDB_LIB})
-
-dnl ---------------------------------------------------------------------
-dnl Find ESRI SDE ONLY IF REQUESTED.
-dnl ---------------------------------------------------------------------
-
-SDE_ENABLED=no
-
-AC_CHECKING(whether we should include ESRI SDE support)
-AC_ARG_WITH(sde,
-[  --with-sde[=DIR]        Include ESRI SDE support (DIR is SDE's install dir).],,)
-
-AC_ARG_WITH(sde-version,
-[  --with-sde-version[=VERSION NUMBER]  Set ESRI SDE version number (Default is 80).],SDE_VERSION=$with_sde_version,SDE_VERSION=80)
-
-if test -z "$SDE_VERSION" -o `expr "$SDE_VERSION" \>\= 92` = 1; then
-SDE_VERSION=""
-fi
-if test "$with_sde" = "yes" ; then
-
-  AC_CHECK_LIB(sde$SDE_VERSION,SE_connection_create,SDE_ENABLED=yes,,,)
-
-  if test -n "$SDE_ENABLED" ; then
-      SDE_LIB="-lsde$SDE_VERSION -lpe$SDE_VERSION -lsg$SDE_VERSION"
-      AC_CHECK_LIB(pthread, main, SDE_LIB="$SDE_LIB -lpthread",,)
-      AC_CHECK_LIB(socket, main, SDE_LIB="$SDE_LIB -lsocket",,)
-      AC_CHECK_LIB(dl, main, SDE_LIB="$SDE_LIB -ldl",,)
-      AC_MSG_RESULT([        using ESRI SDE from system libs.])
-  else
-      AC_MSG_WARN([        ESRI SDE not found in system libs... use --with-sde=DIR.])
-  fi
-
-elif test -n "$with_sde" -a "$with_sde" != "no" ; then
-
-  SDE_DIR=$with_sde
-
-  test -f $SDE_DIR/arcsde/coverages/include/sdetype.h && SDE_INCDIR="$SDE_DIR/arcsde/coverages/include"
-  test -f $SDE_DIR/include/sdetype.h && SDE_INCDIR="$SDE_DIR/include"
-  test -f $SDE_DIR/sdetype.h && SDE_INCDIR="$SDE_DIR"
-
-  test -f $SDE_DIR/lib/libsde$SDE_VERSION.a && SDE_LIBDIR="$SDE_DIR/lib"
-  test -f $SDE_DIR/lib64/libsde$SDE_VERSION.a && SDE_LIBDIR="$SDE_DIR/lib64"
-  test -f $SDE_DIR/libsde$SDE_VERSION.a && SDE_LIBDIR="$SDE_DIR"
-
-  test -f $SDE_DIR/lib/libsde$SDE_VERSION.so -o -f $SDE_DIR/lib/libsde$SDE_VERSION.sl && SDE_LIBDIR="$SDE_DIR/lib"
-  test -f $SDE_DIR/lib64/libsde$SDE_VERSION.so -o -f $SDE_DIR/lib64/libsde$SDE_VERSION.sl && SDE_LIBDIR="$SDE_DIR/lib64"
-  test -f $SDE_DIR/libsde$SDE_VERSION.so -o -f $SDE_DIR/libsde$SDE_VERSION.sl && SDE_LIBDIR="$SDE_DIR"
-
-  if test -n "$SDE_INCDIR" -a -n "$SDE_LIBDIR" ; then
-      SDE_INC=-I$SDE_INCDIR
-      SDE_LIB="-L$SDE_LIBDIR -lsde$SDE_VERSION -lpe$SDE_VERSION -lsg$SDE_VERSION"
-      AC_CHECK_LIB(pthread, main, SDE_LIB="$SDE_LIB -lpthread",,)
-      AC_CHECK_LIB(socket, main, SDE_LIB="$SDE_LIB -lsocket",,)
-      AC_CHECK_LIB(dl, main, SDE_LIB="$SDE_LIB -ldl",,)
-  else
-      AC_MSG_ERROR("Could not find sdetype.h or libsde$SDE_VERSION.a/libsde$SDE_VERSION.so in $SDE_DIR.")
-  fi
-
-  if test "`arch`" = "x86_64" ; then
-    AC_MSG_RESULT([        Adding -DSDE64 for 64bit platform.])
-    SDE_INC="$SDE_INC -DSDE64"
-  fi
-
-  SDE_ENABLED=yes
-  OPT_GDAL_FORMATS="sde $OPT_GDAL_FORMATS"
-  AC_MSG_RESULT([        using ESRI SDE from $SDE_DIR.])
-
-else
-
-  AC_MSG_RESULT([        ESRI SDE support not requested.])
-fi
-
-AC_SUBST(SDE_ENABLED,$SDE_ENABLED)
-AC_SUBST(SDE_INC,    $SDE_INC)
-AC_SUBST(SDE_LIB,    $SDE_LIB)
 
 dnl ---------------------------------------------------------------------------
 dnl Check if epsilon library is available.
@@ -4950,8 +4916,8 @@ if test "$with_poppler" != "no" -a "$with_poppler" != ""; then
             [POPPLER_VERSION=`$PKG_CONFIG --modversion poppler`], [POPPLER_VERSION=])
     if test "$POPPLER_VERSION" != ""; then
         HAVE_POPPLER=yes
-        POPPLER_MAJOR_VERSION=`expr $POPPLER_VERSION : '\([[0-9]]*\)'`
-        POPPLER_MINOR_VERSION=`expr $POPPLER_VERSION : '[[0-9]]*\.\([[0-9]]*\)'`
+        POPPLER_MAJOR_VERSION=`echo $POPPLER_VERSION | cut -d'.' -f1`
+        POPPLER_MINOR_VERSION=`echo $POPPLER_VERSION | cut -d'.' -f2 | sed -e 's/^0//'`
         POPPLER_CFLAGS=`echo $POPPLER_CFLAGS $POPPLER_CFLAGS | sed "s/include\/poppler/include/"`
     fi
 else
@@ -5089,12 +5055,13 @@ if test "$with_pdfium" != "no" -a "$with_pdfium" != ""; then
     rm -f testpdfium.*
     echo '#include "public/fpdfview.h"' > testpdfium.cpp
     echo '#include "core/fpdfapi/page/cpdf_page.h"' >> testpdfium.cpp
+    echo '#include "constants/transparency.h"' >> testpdfium.cpp # specific to pdfium_build_gdal_3_2
     echo 'int main(int argc, char** argv) { FPDF_InitLibrary(); FPDF_DestroyLibrary(); return 0; } ' >> testpdfium.cpp
     TEST_CXX_FLAGS=""
     if test ! -z "`uname | grep Darwin`" ; then
         TEST_CXX_FLAGS="$TEST_CXX_FLAGS -stdlib=libstdc++"
     fi
-    if ${CXX} ${CXXFLAGS} ${CPPFLAGS} $TEST_CXX_FLAGS testpdfium.cpp -o testpdfium ${PDFIUM_INC} ${PDFIUM_LIB} >/dev/null 2>/dev/null; then
+    if ${CXX} ${CXXFLAGS} ${CPPFLAGS} $TEST_CXX_FLAGS -std=c++14 testpdfium.cpp -o testpdfium ${PDFIUM_INC} ${PDFIUM_LIB} >/dev/null 2>/dev/null; then
         HAVE_PDFIUM=yes
         CXXFLAGS="$TEST_CXX_FLAGS $CXXFLAGS"
         if test "$PDF_PLUGIN" = "no"; then
@@ -5107,7 +5074,7 @@ if test "$with_pdfium" != "no" -a "$with_pdfium" != ""; then
     rm -f testpdfium
 
     if test "$HAVE_PDFIUM" = "no" -a "$with_pdfium" != ""; then
-        AC_MSG_ERROR([pdfium requested but not found. Must come from https://github.com/rouault/pdfium_build_gdal_3_1])
+        AC_MSG_ERROR([pdfium requested but not found. Must come from https://github.com/rouault/pdfium_build_gdal_3_2])
     fi
 else
     AC_MSG_RESULT([disabled])
@@ -5907,8 +5874,13 @@ AC_ARG_WITH([lerc],
 
 AC_MSG_CHECKING([for LERC])
 if test "$with_lerc" = yes -o x"$with_lerc" = x ; then
-    HAVE_LERC=yes
-    AC_MSG_RESULT([enabled])
+    if test "$ac_cv_c_bigendian" = "yes"; then
+        HAVE_LERC=no
+        AC_MSG_RESULT([disabled on big-endian])
+    else
+        HAVE_LERC=yes
+        AC_MSG_RESULT([enabled])
+    fi
 else
     HAVE_LERC=no
     AC_MSG_RESULT([disabled by user])
@@ -6072,6 +6044,7 @@ LOC_MSG()
 LOC_MSG([  LIBTOOL support:           ${with_libtool}])
 LOC_MSG()
 LOC_MSG([  LIBZ support:              ${LIBZ_SETTING}])
+LOC_MSG([  libdeflate support:        ${LIBDEFLATE_SETTING}])
 LOC_MSG([  LIBLZMA support:           ${LIBLZMA_SETTING}])
 LOC_MSG([  ZSTD support:              ${ZSTD_SETTING}])
 LOC_MSG([  cryptopp support:          ${HAVE_CRYPTOPP}])
@@ -6126,7 +6099,6 @@ LOC_MSG([  MDB support:               ${MDB_ENABLED}])
 LOC_MSG([  PCIDSK support:            ${PCIDSK_SETTING}])
 LOC_MSG([  OCI support:               ${HAVE_OCI}])
 LOC_MSG([  GEORASTER support:         ${HAVE_GEORASTER}])
-LOC_MSG([  SDE support:               ${SDE_ENABLED}])
 LOC_MSG([  Rasdaman support:          ${RASDAMAN_ENABLED}])
 LOC_MSG([  RDB support:               ${RDB_SETTING}])
 LOC_MSG([  DODS support:              ${HAVE_DODS}])

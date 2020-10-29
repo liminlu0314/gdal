@@ -126,7 +126,6 @@ void CPL_DLL GDALRegister_Terragen(void);
 void CPL_DLL GDALRegister_WCS(void);
 void CPL_DLL GDALRegister_WMS(void);
 void CPL_DLL GDALRegister_HTTP(void);
-void CPL_DLL GDALRegister_SDE(void);
 void CPL_DLL GDALRegister_GSAG(void);
 void CPL_DLL GDALRegister_GSBG(void);
 void CPL_DLL GDALRegister_GS7BG(void);
@@ -210,6 +209,7 @@ void CPL_DLL GDALRegister_TGA(void);
 
 void CPL_DLL GDALRegister_TFATMBTiles(void);
 
+void CPL_DLL GDALRegister_OGCAPI(void);
 CPL_C_END
 
 #endif /* ndef GDAL_FRMTS_H_INCLUDED */

@@ -102,8 +102,11 @@ static double NCDFGetDefaultNoDataValue( int nCdfId, int nVarId, int nVarType, b
 
 // Replace this where used.
 static char **NCDFTokenizeArray( const char *pszValue );
-static void CopyMetadata( void  *poDS, int fpImage, int CDFVarID,
-                          const char *pszMatchPrefix=nullptr, bool bIsBand=true );
+static void CopyMetadata( GDALDataset* poSrcDS,
+                          GDALRasterBand* poSrcBand,
+                          GDALRasterBand* poDstBand,
+                          int fpImage, int CDFVarID,
+                          const char *pszMatchPrefix=nullptr );
 
 // NetCDF-4 groups helper functions.
 // They all work also for NetCDF-3 files which are considered as
@@ -183,7 +186,7 @@ class netCDFRasterBand final: public GDALPamRasterBand
                                       void* pImage );
 
   protected:
-    CPLXMLNode *SerializeToXML( const char *pszVRTPath ) override;
+    CPLXMLNode *SerializeToXML( const char *pszUnused ) override;
 
   public:
     netCDFRasterBand( netCDFDataset *poDS,
@@ -2402,6 +2405,8 @@ CPLXMLNode *netCDFDataset::SerializeToXML( const char *pszUnused )
         if( psBandTree != nullptr )
             CPLAddXMLChild(psDSTree, psBandTree);
     }
+
+    SerializeMDArrayStatistics(psDSTree);
 
     // We don't want to return anything if we had no metadata to attach.
     if( psDSTree->psChild == nullptr )
@@ -7265,20 +7270,25 @@ GDALDataset *netCDFDataset::Open( GDALOpenInfo *poOpenInfo )
             CSLTokenizeString2(poOpenInfo->pszFilename,
                                ":", CSLT_HONOURSTRINGS|CSLT_PRESERVEESCAPES);
 
-        // Check for drive name in windows NETCDF:"D:\...
-        if( CSLCount(papszName) == 4 &&
-            ((strlen(papszName[1]) == 1 &&
-            (papszName[2][0] == '/' || papszName[2][0] == '\\')) ||
-            (STARTS_WITH(papszName[1], "/vsicurl/http"))) )
+        if( CSLCount(papszName) >= 3 &&
+                ((strlen(papszName[1]) == 1 && /* D:\\bla */
+                    (papszName[2][0] == '/' || papszName[2][0] == '\\')) ||
+                 EQUAL(papszName[1], "http") ||
+                 EQUAL(papszName[1], "https") ||
+                 EQUAL(papszName[1], "/vsicurl/http") ||
+                 EQUAL(papszName[1], "/vsicurl/https")) )
         {
-            poDS->osFilename = papszName[1];
-            poDS->osFilename += ':';
-            poDS->osFilename += papszName[2];
-            osSubdatasetName = papszName[3];
-            bTreatAsSubdataset = true;
-            CSLDestroy(papszName);
+            const int nCountBefore = CSLCount(papszName);
+            CPLString osTmp = papszName[1];
+            osTmp += ':';
+            osTmp += papszName[2];
+            CPLFree(papszName[1]);
+            CPLFree(papszName[2]);
+            papszName[1] = CPLStrdup(osTmp);
+            memmove(papszName + 2, papszName + 3, (nCountBefore - 2) * sizeof(char*));
         }
-        else if( CSLCount(papszName) == 3 )
+
+        if( CSLCount(papszName) == 3 )
         {
             poDS->osFilename = papszName[1];
             osSubdatasetName = papszName[2];
@@ -7303,19 +7313,24 @@ GDALDataset *netCDFDataset::Open( GDALOpenInfo *poOpenInfo )
                      "Failed to parse NETCDF: prefix string into expected 2, 3 or 4 fields.");
             return nullptr;
         }
-        // Identify Format from real file, with bCheckExt=FALSE.
-        GDALOpenInfo *poOpenInfo2 =
-            new GDALOpenInfo(poDS->osFilename.c_str(), GA_ReadOnly);
-        poDS->eFormat = IdentifyFormat(poOpenInfo2, FALSE);
-        delete poOpenInfo2;
-        if( NCDF_FORMAT_NONE == poDS->eFormat ||
-            NCDF_FORMAT_UNKNOWN == poDS->eFormat )
+
+        if( !STARTS_WITH(poDS->osFilename, "http://") &&
+            !STARTS_WITH(poDS->osFilename, "https://") )
         {
-            CPLReleaseMutex(hNCMutex);  // Release mutex otherwise we'll
-                                        // deadlock with GDALDataset own mutex.
-            delete poDS;
-            CPLAcquireMutex(hNCMutex, 1000.0);
-            return nullptr;
+            // Identify Format from real file, with bCheckExt=FALSE.
+            GDALOpenInfo *poOpenInfo2 =
+                new GDALOpenInfo(poDS->osFilename.c_str(), GA_ReadOnly);
+            poDS->eFormat = IdentifyFormat(poOpenInfo2, FALSE);
+            delete poOpenInfo2;
+            if( NCDF_FORMAT_NONE == poDS->eFormat ||
+                NCDF_FORMAT_UNKNOWN == poDS->eFormat )
+            {
+                CPLReleaseMutex(hNCMutex);  // Release mutex otherwise we'll
+                                            // deadlock with GDALDataset own mutex.
+                delete poDS;
+                CPLAcquireMutex(hNCMutex, 1000.0);
+                return nullptr;
+            }
         }
     }
     else
@@ -7422,7 +7437,9 @@ GDALDataset *netCDFDataset::Open( GDALOpenInfo *poOpenInfo )
         {
             // Warn if file detection conflicts with that from libnetcdf
             // except for NC4C, which we have no way of detecting initially.
-            if( nTmpFormat != NCDF_FORMAT_NC4C )
+            if( nTmpFormat != NCDF_FORMAT_NC4C &&
+                !STARTS_WITH(poDS->osFilename, "http://") &&
+                !STARTS_WITH(poDS->osFilename, "https://") )
             {
                 CPLError(CE_Warning, CPLE_AppDefined,
                          "NetCDF driver detected file type=%d, but libnetcdf detected type=%d",
@@ -8031,26 +8048,29 @@ GDALDataset *netCDFDataset::Open( GDALOpenInfo *poOpenInfo )
 /*      Create a copy of metadata for NC_GLOBAL or a variable           */
 /************************************************************************/
 
-static void CopyMetadata( void *poDS, int fpImage, int CDFVarID,
-                          const char *pszPrefix, bool bIsBand )
+static void CopyMetadata( GDALDataset* poSrcDS,
+                          GDALRasterBand* poSrcBand,
+                          GDALRasterBand* poDstBand,
+                          int fpImage, int CDFVarID,
+                          const char *pszPrefix )
 {
     char **papszFieldData = nullptr;
 
     // Remove the following band meta but set them later from band data.
-    const char *papszIgnoreBand[] = { CF_ADD_OFFSET, CF_SCALE_FACTOR,
+    const char * const papszIgnoreBand[] = { CF_ADD_OFFSET, CF_SCALE_FACTOR,
                                       "valid_range", "_Unsigned",
                                       _FillValue, "coordinates",
                                       nullptr };
-    const char *papszIgnoreGlobal[] = { "NETCDF_DIM_EXTRA", nullptr };
+    const char * const papszIgnoreGlobal[] = { "NETCDF_DIM_EXTRA", nullptr };
 
     char **papszMetadata = nullptr;
-    if( CDFVarID == NC_GLOBAL )
+    if( poSrcDS )
     {
-        papszMetadata = GDALGetMetadata((GDALDataset *)poDS, "");
+        papszMetadata = poSrcDS->GetMetadata();
     }
-    else
+    else if( poSrcBand )
     {
-        papszMetadata = GDALGetMetadata((GDALRasterBandH)poDS, nullptr);
+        papszMetadata = poSrcBand->GetMetadata();
     }
 
     const int nItems = CSLCount(papszMetadata);
@@ -8154,19 +8174,18 @@ static void CopyMetadata( void *poDS, int fpImage, int CDFVarID,
     if( papszFieldData ) CSLDestroy(papszFieldData);
 
     // Set add_offset and scale_factor here if present.
-    if( CDFVarID != NC_GLOBAL && bIsBand )
+    if( poSrcBand && poDstBand )
     {
 
-        GDALRasterBandH poRB = poDS;
         int bGotAddOffset = FALSE;
-        const double dfAddOffset = GDALGetRasterOffset(poRB, &bGotAddOffset);
+        const double dfAddOffset = poSrcBand->GetOffset(&bGotAddOffset);
         int bGotScale = FALSE;
-        const double dfScale = GDALGetRasterScale(poRB, &bGotScale);
+        const double dfScale = poSrcBand->GetScale(&bGotScale);
 
         if( bGotAddOffset && dfAddOffset != 0.0 )
-            GDALSetRasterOffset(poRB, dfAddOffset);
+            poDstBand->SetOffset(dfAddOffset);
         if( bGotScale && dfScale != 1.0 )
-            GDALSetRasterScale(poRB, dfScale);
+            poDstBand->SetScale(dfScale);
     }
 }
 
@@ -8496,7 +8515,7 @@ netCDFDataset::CreateCopy( const char *pszFilename, GDALDataset *poSrcDS,
 
     // Copy global metadata.
     // Add Conventions, GDAL info and history.
-    CopyMetadata((void *)poSrcDS, poDS->cdfid, NC_GLOBAL, nullptr, false);
+    CopyMetadata(poSrcDS, nullptr, nullptr, poDS->cdfid, NC_GLOBAL, nullptr);
     NCDFAddGDALHistory(poDS->cdfid, pszFilename,
                        poSrcDS->GetMetadataItem("NC_GLOBAL#history", ""),
                        "CreateCopy");
@@ -8586,7 +8605,7 @@ netCDFDataset::CreateCopy( const char *pszFilename, GDALDataset *poSrcDS,
 
             // Add dim metadata, using global var# items.
             snprintf(szTemp, sizeof(szTemp), "%s#", papszExtraDimNames[i]);
-            CopyMetadata(poSrcDS, poDS->cdfid, panDimVarIds[i], szTemp, false);
+            CopyMetadata(poSrcDS, nullptr, nullptr, poDS->cdfid, panDimVarIds[i], szTemp);
         }
     }
 
@@ -8718,8 +8737,10 @@ netCDFDataset::CreateCopy( const char *pszFilename, GDALDataset *poSrcDS,
         }
 
         // Copy Metadata for band.
-        CopyMetadata((void *)GDALGetRasterBand(poSrcDS, iBand),
-                      poDS->cdfid, poBand->nZId);
+        CopyMetadata(nullptr,
+                     poSrcDS->GetRasterBand(iBand),
+                     poBand,
+                     poDS->cdfid, poBand->nZId);
 
         // If more than 2D pass the first band's netcdf var ID to subsequent
         // bands.

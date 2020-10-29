@@ -4866,6 +4866,8 @@ void GDALRasterBand::SetValidPercent(GUIntBig nSampleCount, GUIntBig nValidCount
  * Once computed, the statistics will generally be "set" back on the
  * raster band using SetStatistics().
  *
+ * Cached statistics can be cleared with GDALDataset::ClearStatistics().
+ *
  * This method is the same as the C function GDALComputeRasterStatistics().
  *
  * @param bApproxOK If TRUE statistics may be computed based on overviews
@@ -6529,6 +6531,7 @@ void GDALRasterBand::IncDirtyBlocks( int nInc )
 /*                            ReportError()                             */
 /************************************************************************/
 
+#ifndef DOXYGEN_XML
 /**
  * \brief Emits an error related to a raster band.
  *
@@ -6569,6 +6572,7 @@ void GDALRasterBand::ReportError( CPLErr eErrClass, CPLErrorNum err_no,
     }
     va_end(args);
 }
+#endif
 
 /************************************************************************/
 /*                           GetVirtualMemAuto()                        */

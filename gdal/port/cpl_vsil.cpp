@@ -124,6 +124,34 @@ char **VSIReadDirEx( const char *pszPath, int nMaxFiles )
 }
 
 /************************************************************************/
+/*                             VSISiblingFiles()                        */
+/************************************************************************/
+
+/**
+ * \brief Return related filenames
+  *
+  * This function is essentially meant at being used by GDAL internals.
+ *
+ * @param pszFilename the path of a filename to inspect
+ * UTF-8 encoded.
+ * @return The list of entries, relative to the directory, of all sidecar
+ * files available or NULL if the list is not known. 
+ * Filenames are returned in UTF-8 encoding.
+ * Most implementations will return NULL, and a subsequent ReadDir will
+ * list all files available in the file's directory. This function will be
+ * overridden by VSI FilesystemHandlers that wish to force e.g. an empty list
+ * to avoid opening non-existant files on slow filesystems. The return value shall be destroyed with CSLDestroy()
+ * @since GDAL 3.2
+ */
+char **VSISiblingFiles( const char *pszFilename)
+{
+    VSIFilesystemHandler *poFSHandler =
+        VSIFileManager::GetHandler( pszFilename );
+
+    return poFSHandler->SiblingFiles( pszFilename );
+}
+
+/************************************************************************/
 /*                             VSIReadRecursive()                       */
 /************************************************************************/
 
@@ -613,7 +641,7 @@ int VSIRename( const char * oldpath, const char * newpath )
  * Currently accepted options are:
  * <ul>
  * <li>RECURSIVE=NO (the default is YES)</li>
- * <li>SYNC_STRATEGY=TIMESTAMP/ETAG. Determines which criterion is used to
+ * <li>SYNC_STRATEGY=TIMESTAMP/ETAG/OVERWRITE. Determines which criterion is used to
  *     determine if a target file must be replaced when it already exists and
  *     has the same file size as the source.
  *     Only applies for a source or target being a network filesystem.
@@ -629,7 +657,11 @@ int VSIRename( const char * oldpath, const char * newpath )
  *     for files not using KMS server side encryption and uploaded in a single
  *     PUT operation (so smaller than 50 MB given the default used by GDAL).
  *     Only to be used for /vsis3/, /vsigs/ or other filesystems using a
- *     MD5Sum as ETAG.</li>
+ *     MD5Sum as ETAG.
+ *
+ *     The OVERWRITE strategy (GDAL >= 3.2) will always overwrite the target file
+ *     with the source one.
+ * </li>
  * <li>NUM_THREADS=integer. Number of threads to use for parallel file copying.
  *     Only use for when /vsis3/, /vsigs/ or /vsiaz/ is in source or target.
  *     Since GDAL 3.1</li>

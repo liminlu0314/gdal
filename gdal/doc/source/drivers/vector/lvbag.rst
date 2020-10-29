@@ -19,11 +19,11 @@ library.
 
 Each extract XML file is presented as a single OGR layer. The layers are
 georeferenced in their native (EPSG:28992) SRS. Each dataset exposes the LvID
-field according to the BAG 2.0 specfication.
+field according to the BAG 2.0 specification.
 
 More information about the LV BAG 2.0 can be found at https://zakelijk.kadaster.nl/bag-2.0
 
-LV BAG model definitions are available at https://zakelijk.kadaster.nl/documents/20838/87954/XSD%27s+BAG+2.0+Extract
+LV BAG model definitions are available at https://www.kadaster.nl/-/xsd-s-bag-2.0-extract
 
 Note 1 : the earlier BAG 1.0 extract is **not supported**\ by this driver.
 

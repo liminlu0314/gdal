@@ -32,6 +32,8 @@
 #include "ogr_p.h"
 
 constexpr const char *pszSpecificationUrn = "urn:ogc:def:crs:EPSG::28992";
+constexpr const size_t nDefaultLokaalIDSize = 16;
+constexpr const size_t nWplLokaalIDSize = 4;
 
 /************************************************************************/
 /*                           OGRLVBAGLayer()                            */
@@ -137,7 +139,7 @@ static inline const char* XMLTagSplit( const char *pszName )
 void OGRLVBAGLayer::AddSpatialRef( OGRwkbGeometryType eTypeIn )
 {
     OGRGeomFieldDefn *poGeomField = poFeatureDefn->GetGeomFieldDefn(0);
-    OGRSpatialReference* poSRS = new OGRSpatialReference{};
+    OGRSpatialReference* poSRS = new OGRSpatialReference();
     poSRS->importFromURN(pszSpecificationUrn);
     poGeomField->SetSpatialRef(poSRS);
     poGeomField->SetType(eTypeIn);
@@ -464,7 +466,7 @@ void OGRLVBAGLayer::StartElementCbk( const char *pszName, const char **ppszAttr 
             OGRGeomFieldDefn *poGeomField = poFeatureDefn->GetGeomFieldDefn(0);
             if( EQUAL("srsname", papszIter[0]) && poGeomField->GetSpatialRef() == nullptr )
             {
-                OGRSpatialReference* poSRS = new OGRSpatialReference{};
+                OGRSpatialReference* poSRS = new OGRSpatialReference();
                 poSRS->importFromURN(papszIter[1]);
                 poGeomField->SetSpatialRef(poSRS);
                 poSRS->Release();
@@ -517,8 +519,24 @@ void OGRLVBAGLayer::EndElementCbk( const char *pszName )
             if( iFieldIndex > -1 )
             {
                 const char *pszValue = osElementString.c_str();
+                const size_t nIdLength = osElementString.size();
                 const OGRFieldDefn *poFieldDefn = poFeatureDefn->GetFieldDefn(iFieldIndex);
-                if( poFieldDefn->GetSubType() == OGRFieldSubType::OFSTBoolean )
+                if( EQUAL("lokaalid", pszTag)
+                    && nIdLength != nDefaultLokaalIDSize && nIdLength != nWplLokaalIDSize )
+                {
+                    if( nIdLength == nDefaultLokaalIDSize-1 )
+                    {
+                        osElementString = '0' + osElementString;
+                        m_poFeature->SetField(iFieldIndex, osElementString.c_str());
+                    }
+                    else
+                    {
+                        m_poFeature->SetFieldNull(iFieldIndex);
+                        CPLError(CE_Warning, CPLE_AppDefined, 
+                            "Invalid LokaalID : %s, value set to null", pszValue);
+                    }
+                }
+                else if( poFieldDefn->GetSubType() == OGRFieldSubType::OFSTBoolean )
                 {
                     if( EQUAL("n", pszValue) )
                         m_poFeature->SetField(iFieldIndex, 0);
@@ -547,11 +565,15 @@ void OGRLVBAGLayer::EndElementCbk( const char *pszName )
                                                 nullptr, nullptr,
                                                 static_cast<float*>(nullptr), nullptr);
                     if( nYear > 2100 )
+                    {
                         m_poFeature->SetFieldNull(iFieldIndex);
+                        CPLError(CE_Warning, CPLE_AppDefined, 
+                            "Invalid date : %s, value set to null", pszValue);
+                    }
                 }
             }
+            osElementString.Clear();
         }
-        osElementString.Clear();
     }
     else if( nAttributeElementDepth == nCurrentDepth )
         nAttributeElementDepth = 0;
@@ -625,11 +647,11 @@ void OGRLVBAGLayer::EndElementCbk( const char *pszName )
                 }
                 else if( poGeomField->GetType() == wkbMultiPolygon
                     && poGeom->getGeometryType() == wkbGeometryCollection
-                    && dynamic_cast<OGRGeometryCollection*>(poGeom.get())->getNumGeometries() > 0
-                    && dynamic_cast<OGRGeometryCollection*>(poGeom.get())->getGeometryRef(0)->getGeometryType() == wkbPolygon )
+                    && poGeom->toGeometryCollection()->getNumGeometries() > 0
+                    && poGeom->toGeometryCollection()->getGeometryRef(0)->getGeometryType() == wkbPolygon )
                 {
                     std::unique_ptr<OGRMultiPolygon> poMultiPolygon = std::unique_ptr<OGRMultiPolygon>{ new OGRMultiPolygon };
-                    for (auto &poChildGeom : dynamic_cast<OGRGeometryCollection*>(poGeom.get()))
+                    for (auto &poChildGeom : poGeom->toGeometryCollection())
                         poMultiPolygon->addGeometry(poChildGeom);
                     poGeom.reset(poMultiPolygon.release());
                 }

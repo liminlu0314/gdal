@@ -17,9 +17,6 @@ cd ../..
 cd swig/java
 make test
 cd ../..
-cd swig/csharp
-make test
-cd ../..
 # CPP unit tests
 cd ../autotest
 cd cpp
@@ -36,7 +33,7 @@ wget http://download.osgeo.org/gdal/data/pgeo/PGeoTest.zip
 unzip PGeoTest.zip
 cd ../../..
 
-export PYTHONPATH=/usr/lib/python2.7/dist-packages
+export PYTHONPATH=/usr/lib/python3.5/dist-packages
 
 # Run ogr_fgdb.py in isolation from the rest
 $PYTEST ogr/ogr_fgdb.py

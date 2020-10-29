@@ -315,10 +315,6 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_WMS();
 #endif
 
-#ifdef FRMT_sde
-    GDALRegister_SDE();
-#endif
-
 #ifdef FRMT_msgn
     GDALRegister_MSGN();
 #endif
@@ -598,6 +594,10 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_tga
     GDALRegister_TGA();
+#endif
+
+#ifdef FRMT_ogcapi
+    GDALRegister_OGCAPI();
 #endif
 
     // NOTE: you need to generally your own driver before that line.

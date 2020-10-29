@@ -436,13 +436,7 @@ bool VSIDIRS3::IssueListDir()
 
         NetworkStatisticsLogger::LogGET(requestHelper.sWriteFuncData.nSize);
 
-        if( requestHelper.sWriteFuncData.pBuffer == nullptr)
-        {
-            curl_easy_cleanup(hCurlHandle);
-            return false;
-        }
-
-        if( response_code != 200 )
+        if( response_code != 200 || requestHelper.sWriteFuncData.pBuffer == nullptr )
         {
             bool bUpdateMap = true;
             if( requestHelper.sWriteFuncData.pBuffer != nullptr &&
@@ -936,6 +930,14 @@ CPLString IVSIS3LikeFSHandler::UploadPart(const CPLString& osFilename,
                 nRetryCount++;
                 bRetry = true;
             }
+            else if( requestHelper.sWriteFuncData.pBuffer != nullptr &&
+                     poS3HandleHelper->CanRestartOnError(requestHelper.sWriteFuncData.pBuffer,
+                                                         requestHelper.sWriteFuncHeaderData.pBuffer,
+                                                         false) )
+            {
+                UpdateMapFromHandle(poS3HandleHelper);
+                bRetry = true;
+            }
             else
             {
                 CPLDebug(GetDebugKey(), "%s",
@@ -1014,6 +1016,7 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
         m_hCurlMulti = curl_multi_init();
     }
 
+    WriteFuncStruct sWriteFuncData;
     double dfRetryDelay = m_dfRetryDelay;
     int nRetryCount = 0;
     // We can only easily retry at the first chunk of a transfer
@@ -1030,6 +1033,11 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
             curl_easy_setopt(hCurlHandle, CURLOPT_READFUNCTION,
                             ReadCallBackBufferChunked);
             curl_easy_setopt(hCurlHandle, CURLOPT_READDATA, this);
+
+            VSICURLInitWriteFuncStruct(&sWriteFuncData, nullptr, nullptr, nullptr);
+            curl_easy_setopt(hCurlHandle, CURLOPT_WRITEDATA, &sWriteFuncData);
+            curl_easy_setopt(hCurlHandle, CURLOPT_WRITEFUNCTION,
+                            VSICurlHandleWriteFunc);
 
             VSICURLInitWriteFuncStruct(&m_sWriteFuncHeaderData, nullptr, nullptr, nullptr);
             curl_easy_setopt(hCurlHandle, CURLOPT_HEADERDATA, &m_sWriteFuncHeaderData);
@@ -1092,13 +1100,6 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
                                 m_sWriteFuncHeaderData.pBuffer,
                                 m_osCurlErrBuf.c_str()) : 0.0;
 
-                            curl_multi_remove_handle(m_hCurlMulti, m_hCurl);
-                            curl_easy_cleanup(m_hCurl);
-                            m_hCurl = nullptr;
-
-                            CPLFree(m_sWriteFuncHeaderData.pBuffer);
-                            m_sWriteFuncHeaderData.pBuffer = nullptr;
-
                             if( dfNewRetryDelay > 0 &&
                                 nRetryCount < m_nMaxRetry )
                             {
@@ -1113,6 +1114,14 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
                                 nRetryCount++;
                                 bRetry = true;
                             }
+                            else if( sWriteFuncData.pBuffer != nullptr &&
+                                m_poS3HandleHelper->CanRestartOnError(sWriteFuncData.pBuffer,
+                                                                      m_sWriteFuncHeaderData.pBuffer,
+                                                                      false) )
+                            {
+                                m_poFS->UpdateMapFromHandle(m_poS3HandleHelper);
+                                bRetry = true;
+                            }
                             else
                             {
                                 CPLError(CE_Failure, CPLE_AppDefined,
@@ -1121,8 +1130,20 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
                                         m_osCurlErrBuf.c_str());
 
                                 curl_slist_free_all(headers);
-                                return 0;
+                                bRetry = false;
                             }
+
+                            curl_multi_remove_handle(m_hCurlMulti, m_hCurl);
+                            curl_easy_cleanup(m_hCurl);
+
+                            CPLFree(sWriteFuncData.pBuffer);
+                            CPLFree(m_sWriteFuncHeaderData.pBuffer);
+
+                            m_hCurl = nullptr;
+                            sWriteFuncData.pBuffer = nullptr;
+                            m_sWriteFuncHeaderData.pBuffer = nullptr;
+                            if( !bRetry )
+                                return 0;
                         }
                     }
                 }
@@ -1148,12 +1169,6 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
                     bCanRetry ? CPLHTTPGetNewRetryDelay(
                     static_cast<int>(response_code), dfRetryDelay,
                     m_sWriteFuncHeaderData.pBuffer, m_osCurlErrBuf.c_str()) : 0.0;
-                curl_multi_remove_handle(m_hCurlMulti, m_hCurl);
-                curl_easy_cleanup(m_hCurl);
-                m_hCurl = nullptr;
-
-                CPLFree(m_sWriteFuncHeaderData.pBuffer);
-                m_sWriteFuncHeaderData.pBuffer = nullptr;
 
                 if( dfNewRetryDelay > 0 &&
                     nRetryCount < m_nMaxRetry )
@@ -1169,14 +1184,33 @@ VSIS3WriteHandle::WriteChunked( const void *pBuffer, size_t nSize, size_t nMemb 
                     nRetryCount++;
                     bRetry = true;
                 }
+                else if( sWriteFuncData.pBuffer != nullptr &&
+                    m_poS3HandleHelper->CanRestartOnError(sWriteFuncData.pBuffer,
+                                                          m_sWriteFuncHeaderData.pBuffer,
+                                                          false) )
+                {
+                    m_poFS->UpdateMapFromHandle(m_poS3HandleHelper);
+                    bRetry = true;
+                }
                 else
                 {
                     CPLError(CE_Failure, CPLE_AppDefined,
                                 "Error %d: %s",
                                 static_cast<int>(response_code),
                                 m_osCurlErrBuf.c_str());
-                    return 0;
+                    bRetry = false;
+                    nMemb = 0;
                 }
+
+                curl_multi_remove_handle(m_hCurlMulti, m_hCurl);
+                curl_easy_cleanup(m_hCurl);
+
+                CPLFree(sWriteFuncData.pBuffer);
+                CPLFree(m_sWriteFuncHeaderData.pBuffer);
+
+                m_hCurl = nullptr;
+                sWriteFuncData.pBuffer = nullptr;
+                m_sWriteFuncHeaderData.pBuffer = nullptr;
             }
         }
     }
@@ -1505,7 +1539,15 @@ bool IVSIS3LikeFSHandler::CompleteMultipart(const CPLString& osFilename,
                 nRetryCount++;
                 bRetry = true;
             }
-            else 
+            else if( requestHelper.sWriteFuncData.pBuffer != nullptr &&
+                poS3HandleHelper->CanRestartOnError(requestHelper.sWriteFuncData.pBuffer,
+                                                    requestHelper.sWriteFuncHeaderData.pBuffer,
+                                                    false) )
+            {
+                UpdateMapFromHandle(poS3HandleHelper);
+                bRetry = true;
+            }
+            else
             {
                 CPLDebug("S3", "%s",
                     requestHelper.sWriteFuncData.pBuffer ? requestHelper.sWriteFuncData.pBuffer : "(null)");
@@ -1581,7 +1623,15 @@ bool IVSIS3LikeFSHandler::AbortMultipart(const CPLString& osFilename,
                 nRetryCount++;
                 bRetry = true;
             }
-            else 
+            else if( requestHelper.sWriteFuncData.pBuffer != nullptr &&
+                poS3HandleHelper->CanRestartOnError(requestHelper.sWriteFuncData.pBuffer,
+                                                    requestHelper.sWriteFuncHeaderData.pBuffer,
+                                                    false) )
+            {
+                UpdateMapFromHandle(poS3HandleHelper);
+                bRetry = true;
+            }
+            else
             {
                 CPLDebug("S3", "%s",
                         requestHelper.sWriteFuncData.pBuffer ? requestHelper.sWriteFuncData.pBuffer : "(null)");
@@ -2287,7 +2337,9 @@ bool VSIS3FSHandler::SetFileMetadata( const char * pszFilename,
             CPLFree(pszKey);
         }
 
-        osXML = CPLSerializeXMLTree(psXML);
+        char* pszXML = CPLSerializeXMLTree(psXML);
+        osXML = pszXML;
+        CPLFree(pszXML);
         CPLDestroyXMLNode(psXML);
     }
 
@@ -3316,8 +3368,28 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
                                 CPLSPrintf("%f", CPL_HTTP_RETRY_DELAY))));
 
     const bool bRecursive = CPLFetchBool(papszOptions, "RECURSIVE", true);
-    const bool bETagStrategy = EQUAL(CSLFetchNameValueDef(
-        papszOptions, "SYNC_STRATEGY", "TIMESTAMP"), "ETAG");
+
+    enum class SyncStrategy
+    {
+        TIMESTAMP,
+        ETAG,
+        OVERWRITE
+    };
+    SyncStrategy eSyncStrategy = SyncStrategy::TIMESTAMP;
+    const char* pszSyncStrategy = CSLFetchNameValueDef(
+        papszOptions, "SYNC_STRATEGY", "TIMESTAMP");
+    if( EQUAL(pszSyncStrategy, "TIMESTAMP") )
+        eSyncStrategy = SyncStrategy::TIMESTAMP;
+    else if( EQUAL(pszSyncStrategy, "ETAG") )
+        eSyncStrategy = SyncStrategy::ETAG;
+    else if( EQUAL(pszSyncStrategy, "OVERWRITE") )
+        eSyncStrategy = SyncStrategy::OVERWRITE;
+    else
+    {
+        CPLError(CE_Warning, CPLE_NotSupported,
+                 "Unsupported value for SYNC_STRATEGY: %s", pszSyncStrategy);
+    }
+
     const bool bDownloadFromNetworkToLocal =
         (!STARTS_WITH(pszTarget, "/vsi") || STARTS_WITH(pszTarget, "/vsimem/")) &&
         STARTS_WITH(pszSource, GetFSPrefix());
@@ -3343,47 +3415,58 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
         return false;
     }
 
-    const auto CanSkipDownloadFromNetworkToLocal = [this, bETagStrategy](
+    const auto CanSkipDownloadFromNetworkToLocal = [this, eSyncStrategy](
         const char* l_pszSource,
         const char* l_pszTarget,
         GIntBig sourceTime,
         GIntBig targetTime,
         const std::function<CPLString(const char*)>& getETAGSourceFile)
     {
-        if( bETagStrategy )
+        switch( eSyncStrategy )
         {
-            VSILFILE* fpOutAsIn = VSIFOpenExL(l_pszTarget, "rb", TRUE);
-            if( fpOutAsIn )
+            case SyncStrategy::ETAG:
             {
-                CPLString md5 = ComputeMD5OfLocalFile(fpOutAsIn);
-                VSIFCloseL(fpOutAsIn);
-                if( getETAGSourceFile(l_pszSource) == md5 )
+                VSILFILE* fpOutAsIn = VSIFOpenExL(l_pszTarget, "rb", TRUE);
+                if( fpOutAsIn )
                 {
-                    CPLDebug(GetDebugKey(),
-                                "%s has already same content as %s",
-                            l_pszTarget, l_pszSource);
+                    CPLString md5 = ComputeMD5OfLocalFile(fpOutAsIn);
+                    VSIFCloseL(fpOutAsIn);
+                    if( getETAGSourceFile(l_pszSource) == md5 )
+                    {
+                        CPLDebug(GetDebugKey(),
+                                    "%s has already same content as %s",
+                                l_pszTarget, l_pszSource);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            case SyncStrategy::TIMESTAMP:
+            {
+                if( targetTime <= sourceTime )
+                {
+                    // Our local copy is older than the source, so
+                    // presumably the source was uploaded from it. Nothing to do
+                    CPLDebug(GetDebugKey(), "%s is older than %s. "
+                                "Do not replace %s assuming it was used to "
+                                "upload %s",
+                                l_pszTarget, l_pszSource,
+                                l_pszTarget, l_pszSource);
                     return true;
                 }
+                return false;
             }
-        }
-        else
-        {
-            if( targetTime <= sourceTime )
+
+            case SyncStrategy::OVERWRITE:
             {
-                // Our local copy is older than the source, so
-                // presumably the source was uploaded from it. Nothing to do
-                CPLDebug(GetDebugKey(), "%s is older than %s. "
-                            "Do not replace %s assuming it was used to "
-                            "upload %s",
-                            l_pszTarget, l_pszSource,
-                            l_pszTarget, l_pszSource);
-                return true;
+                break;
             }
         }
         return false;
     };
 
-    const auto CanSkipUploadFromLocalToNetwork = [this, bETagStrategy](
+    const auto CanSkipUploadFromLocalToNetwork = [this, eSyncStrategy](
         VSILFILE*& l_fpIn,
         const char* l_pszSource,
         const char* l_pszTarget,
@@ -3391,30 +3474,41 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
         GIntBig targetTime,
         const std::function<CPLString(const char*)>& getETAGTargetFile)
     {
-        if( bETagStrategy )
+        switch( eSyncStrategy )
         {
-            l_fpIn = VSIFOpenExL(l_pszSource, "rb", TRUE);
-            if( l_fpIn && getETAGTargetFile(l_pszTarget) == ComputeMD5OfLocalFile(l_fpIn) )
+            case SyncStrategy::ETAG:
             {
-                CPLDebug(GetDebugKey(), "%s has already same content as %s",
-                         l_pszTarget, l_pszSource);
-                VSIFCloseL(l_fpIn);
-                l_fpIn = nullptr;
-                return true;
-            }
-        }
-        else
-        {
-            if( targetTime >= sourceTime )
-            {
-                // The remote copy is more recent than the source, so
-                // presumably it was uploaded from the source. Nothing to do
-                CPLDebug(GetDebugKey(), "%s is more recent than %s. "
-                            "Do not replace %s assuming it was uploaded from "
-                            "%s",
-                            l_pszTarget, l_pszSource,
+                l_fpIn = VSIFOpenExL(l_pszSource, "rb", TRUE);
+                if( l_fpIn && getETAGTargetFile(l_pszTarget) == ComputeMD5OfLocalFile(l_fpIn) )
+                {
+                    CPLDebug(GetDebugKey(), "%s has already same content as %s",
                             l_pszTarget, l_pszSource);
-                return true;
+                    VSIFCloseL(l_fpIn);
+                    l_fpIn = nullptr;
+                    return true;
+                }
+                return false;
+            }
+
+            case SyncStrategy::TIMESTAMP:
+            {
+                if( targetTime >= sourceTime )
+                {
+                    // The remote copy is more recent than the source, so
+                    // presumably it was uploaded from the source. Nothing to do
+                    CPLDebug(GetDebugKey(), "%s is more recent than %s. "
+                                "Do not replace %s assuming it was uploaded from "
+                                "%s",
+                                l_pszTarget, l_pszSource,
+                                l_pszTarget, l_pszSource);
+                    return true;
+                }
+                return false;
+            }
+
+            case SyncStrategy::OVERWRITE:
+            {
+                break;
             }
         }
         return false;
@@ -3770,7 +3864,7 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
             if( VSI_ISDIR(sTarget.st_mode) )
             {
                 osTarget = CPLFormFilename(osTarget, CPLGetFilename(pszSource), nullptr);
-                bTargetIsFile = VSIStatL(osTarget, &sTarget) == 0 && 
+                bTargetIsFile = VSIStatL(osTarget, &sTarget) == 0 &&
                                 !CPL_TO_BOOL(VSI_ISDIR(sTarget.st_mode));
             }
         }
@@ -3872,7 +3966,7 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
                         if( poS3HandleHelper == nullptr )
                             return false;
                         UpdateHandleFromMap(poS3HandleHelper.get());
-                        const auto osUploadID = 
+                        const auto osUploadID =
                             InitiateMultipartUpload(osTarget,
                                                     poS3HandleHelper.get(),
                                                     nMaxRetry,
@@ -4027,8 +4121,9 @@ bool IVSIS3LikeFSHandler::Sync( const char* pszSource, const char* pszTarget,
                         VSIFReadL(pBuffer, 1, nSizeToRead, fpIn) == nSizeToRead )
                     {
                         queue->poFS->UpdateHandleFromMap(poS3HandleHelper.get());
-                        const int nPartNumber = 1 + static_cast<int>(
-                            chunk.nStartOffset / queue->nMaxChunkSize);
+                        const int nPartNumber = 1 +
+                            (queue->nMaxChunkSize == 0 ? 0 /* shouldn't happen */ :
+                                static_cast<int>(chunk.nStartOffset / queue->nMaxChunkSize));
                         const CPLString osEtag = queue->poFS->UploadPart(
                             osSubTarget, nPartNumber,
                             iter->second.osUploadID,

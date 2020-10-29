@@ -394,7 +394,8 @@ Example on how to use the API:
 
 A sample Python script
 `gdal_create_pdf.py <https://raw.githubusercontent.com/OSGeo/gdal/master/gdal/swig/python/samples/gdal_create_pdf.py>`__
-is also available.
+is also available. Starting with GDAL 3.2, the :ref:`gdal_create` utility can
+also be used.
 
 Example of a composition XML file:
 
@@ -517,7 +518,8 @@ available.
 Poppler
 ~~~~~~~
 
-libpoppler itself must have been configured with --enable-xpdf-headers
+libpoppler itself must have been configured with
+-DENABLE_UNSTABLE_API_ABI_HEADERS=ON
 so that the xpdf C++ headers are available. Note: the poppler C++ API
 isn't stable, so the driver compilation may fail with too old or too
 recent poppler versions.
@@ -548,8 +550,14 @@ Only GDAL builds against static builds of PDFium have been tested.
 Building PDFium can be challenging, and particular builds must be used to
 work properly with GDAL.
 
-With GDAL >= 3.1.0
+With GDAL >= 3.2.0
 +++++++++++++++++++
+
+The scripts in the `<https://github.com/rouault/pdfium_build_gdal_3_2>`__
+repository must be used to build a patched version of PDFium.
+
+With GDAL 3.1.x
++++++++++++++++
 
 The scripts in the `<https://github.com/rouault/pdfium_build_gdal_3_1>`__
 repository must be used to build a patched version of PDFium.

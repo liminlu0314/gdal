@@ -1356,3 +1356,169 @@ def test_vrt_source_no_dstrect():
     ds = None
     gdal.Unlink(filename)
 
+
+def test_vrt_dataset_rasterio_recursion_detection():
+
+    gdal.FileFromMemBuffer('/vsimem/test.vrt', """<VRTDataset rasterXSize="20" rasterYSize="20">
+  <VRTRasterBand dataType="Byte" band="1">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">data/byte.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20" RasterYSize="20" DataType="Byte" BlockXSize="20" BlockYSize="20" />
+      <SrcRect xOff="0" yOff="0" xSize="20" ySize="20" />
+      <DstRect xOff="0" yOff="0" xSize="20" ySize="20" />
+    </SimpleSource>
+    <Overview>
+        <SourceFilename relativeToVRT="0">/vsimem/test.vrt</SourceFilename>
+        <SourceBand>1</SourceBand>
+    </Overview>
+  </VRTRasterBand>
+</VRTDataset>""")
+
+    ds = gdal.Open('/vsimem/test.vrt')
+    with gdaltest.error_handler():
+        ds.ReadRaster(0,0,20,20,10,10)
+    gdal.Unlink('/vsimem/test.vrt')
+
+def test_vrt_dataset_rasterio_recursion_detection_does_not_trigger():
+
+    vrt_text = """<VRTDataset rasterXSize="50" rasterYSize="50">
+  <VRTRasterBand dataType="Byte" band="1">
+    <ColorInterp>Red</ColorInterp>
+    <ComplexSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <ColorInterp>Green</ColorInterp>
+    <ComplexSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <ColorInterp>Blue</ColorInterp>
+    <ComplexSource>
+      <SourceFilename>data/rgbsmall.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+    got_data = ds.ReadRaster(0,0,50,50,25,25,resample_alg=gdal.GRIORA_Cubic)
+    ds = gdal.Open('data/rgbsmall.tif')
+    ref_data = ds.ReadRaster(0,0,50,50,25,25,resample_alg=gdal.GRIORA_Cubic)
+    assert got_data == ref_data
+
+
+def test_vrt_dataset_rasterio_non_nearest_resampling_source_with_ovr():
+
+    ds = gdal.GetDriverByName('GTiff').Create('/vsimem/src.tif', 10, 10, 3)
+    ds.GetRasterBand(1).Fill(255)
+    ds.BuildOverviews('NONE', [2])
+    ds.GetRasterBand(1).GetOverview(0).Fill(10)
+    ds = None
+
+    vrt_text = """<VRTDataset rasterXSize="10" rasterYSize="10">
+  <VRTRasterBand dataType="Byte" band="1">
+    <ColorInterp>Red</ColorInterp>
+    <!-- two sources to avoid virtual overview to be created on the VRTRasterBand -->
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="10" ySize="5" />
+      <DstRect xOff="0" yOff="0" xSize="10" ySize="5" />
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="5" xSize="10" ySize="5" />
+      <DstRect xOff="0" yOff="5" xSize="10" ySize="5" />
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <ColorInterp>Green</ColorInterp>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <ColorInterp>Blue</ColorInterp>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+
+    got_data = ds.ReadRaster(0,0,10,10,4,4)
+    got_data = struct.unpack('B' * 4 * 4 * 3, got_data)
+    assert got_data[0] == 10
+
+    got_data = ds.ReadRaster(0,0,10,10,4,4,resample_alg=gdal.GRIORA_Cubic)
+    got_data = struct.unpack('B' * 4 * 4 * 3, got_data)
+    assert got_data[0] == 10
+
+    gdal.Unlink('/vsimem/src.tif')
+
+
+def test_vrt_implicit_ovr_with_hidenodatavalue():
+
+    ds = gdal.GetDriverByName('GTiff').Create('/vsimem/src.tif', 256, 256, 3)
+    ds.GetRasterBand(1).Fill(255)
+    ds.BuildOverviews('NONE', [2])
+    ds.GetRasterBand(1).GetOverview(0).Fill(10)
+    ds = None
+
+    vrt_text = """<VRTDataset rasterXSize="256" rasterYSize="256">
+  <VRTRasterBand dataType="Byte" band="1">
+    <ColorInterp>Red</ColorInterp>
+    <NoDataValue>5</NoDataValue>
+    <HideNoDataValue>1</HideNoDataValue>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="128" yOff="128" xSize="128" ySize="128" />
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <ColorInterp>Green</ColorInterp>
+    <NoDataValue>5</NoDataValue>
+    <HideNoDataValue>1</HideNoDataValue>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="128" yOff="128" xSize="128" ySize="128" />
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <ColorInterp>Blue</ColorInterp>
+    <NoDataValue>5</NoDataValue>
+    <HideNoDataValue>1</HideNoDataValue>
+    <ComplexSource>
+      <SourceFilename>/vsimem/src.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="128" yOff="128" xSize="128" ySize="128" />
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>"""
+    ds = gdal.Open(vrt_text)
+    assert ds.GetRasterBand(1).GetOverviewCount() == 1
+
+    got_data = ds.ReadRaster(0,0,256,256,64,64)
+    got_data = struct.unpack('B' * 64 * 64 * 3, got_data)
+    assert got_data[0] == 5
+    assert got_data[32*64+32] == 10
+
+    got_data = ds.GetRasterBand(1).ReadRaster(0,0,256,256,64,64)
+    got_data = struct.unpack('B' * 64 * 64, got_data)
+    assert got_data[0] == 5
+    assert got_data[32*64+32] == 10
+
+    gdal.Unlink('/vsimem/src.tif')

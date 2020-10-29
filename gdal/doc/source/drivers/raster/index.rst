@@ -136,6 +136,7 @@ Raster drivers
    ntv1
    ntv2
    nwtgrd
+   ogcapi
    ozi
    palsar
    paux
@@ -165,7 +166,6 @@ Raster drivers
    sar_ceos
    sdat
    sdts
-   sde
    sentinel2
    sgi
    sigdem

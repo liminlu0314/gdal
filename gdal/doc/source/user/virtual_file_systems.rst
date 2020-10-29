@@ -26,7 +26,7 @@ It is possible to chain multiple file system handlers.
 
     # ogrinfo a shapefile in a zip file on the internet:
 
-    ogrinfo -ro -al -so /vsizip//vsicurl/https://raw.githubusercontent.com/OSGeo/gdal/master/autotest/ogr/data/poly.zip
+    ogrinfo -ro -al -so /vsizip//vsicurl/https://raw.githubusercontent.com/OSGeo/gdal/master/autotest/ogr/shp/data/poly.zip
 
     # ogrinfo a shapefile in a zip file on an ftp:
 
@@ -48,7 +48,7 @@ Notable exceptions are the netCDF, HDF4 and HDF5 drivers.
 
 To point to a file inside a zip file, the filename must be of the form :file:`/vsizip/path/to/the/file.zip/path/inside/the/zip/file`, where :file:`path/to/the/file.zip` is relative or absolute and :file:`path/inside/the/zip/file` is the relative path to the file inside the archive.
 
-To use the .zip as a directory, you can use :file:`/vsizip/path/to/the/file.zip or /vsizip/path/to/the/file.zip/subdir. Directory listing is available with :cpp:func:`VSIReadDir`. A :cpp:func:`VSIStatL` ("/vsizip/...") call will return the uncompressed size of the file. Directories inside the ZIP file can be distinguished from regular files with the VSI_ISDIR(stat.st_mode) macro as for regular file systems. Getting directory listing and file statistics are fast operations.
+To use the .zip as a directory, you can use :file:`/vsizip/path/to/the/file.zip` or :file:`/vsizip/path/to/the/file.zip/subdir`. Directory listing is available with :cpp:func:`VSIReadDir`. A :cpp:func:`VSIStatL` ("/vsizip/...") call will return the uncompressed size of the file. Directories inside the ZIP file can be distinguished from regular files with the VSI_ISDIR(stat.st_mode) macro as for regular file systems. Getting directory listing and file statistics are fast operations.
 
 Note: in the particular case where the .zip file contains a single file located at its root, just mentioning :file:`/vsizip/path/to/the/file.zip` will work.
 
@@ -163,11 +163,11 @@ Starting with GDAL 2.3, options can be passed in the filename with the following
 
 Partial downloads (requires the HTTP server to support random reading) are done with a 16 KB granularity by default. Starting with GDAL 2.3, the chunk size can be configured with the :decl_configoption:`CPL_VSIL_CURL_CHUNK_SIZE` configuration option, with a value in bytes. If the driver detects sequential reading it will progressively increase the chunk size up to 2 MB to improve download performance. Starting with GDAL 2.3, the :decl_configoption:`GDAL_INGESTED_BYTES_AT_OPEN` configuration option can be set to impose the number of bytes read in one GET call at file opening (can help performance to read Cloud optimized geotiff with a large header).
 
-The :decl_configoption:`GDAL_HTTP_PROXY`, :decl_configoption:`GDAL_HTTP_PROXYUSERPWD` and :decl_configoption:`GDAL_PROXY_AUTH` configuration options can be used to define a proxy server. The syntax to use is the one of Curl ``CURLOPT_PROXY``, ``CURLOPT_PROXYUSERPWD`` and ``CURLOPT_PROXYAUTH`` options.
+The :decl_configoption:`GDAL_HTTP_PROXY` (for both HTTP and HTTPS protocols), :decl_configoption:`GDAL_HTTPS_PROXY` (for HTTPS protocol only), :decl_configoption:`GDAL_HTTP_PROXYUSERPWD` and :decl_configoption:`GDAL_PROXY_AUTH` configuration options can be used to define a proxy server. The syntax to use is the one of Curl ``CURLOPT_PROXY``, ``CURLOPT_PROXYUSERPWD`` and ``CURLOPT_PROXYAUTH`` options.
 
 Starting with GDAL 2.1.3, the :decl_configoption:`CURL_CA_BUNDLE` or :decl_configoption:`SSL_CERT_FILE` configuration options can be used to set the path to the Certification Authority (CA) bundle file (if not specified, curl will use a file in a system location).
 
-Starting with GDAL 2.3, additional HTTP headers can be sent by setting the :decl_configoption:`GDAL_HTTP_HEADER_FILE` configuration option to point to a filename of a text file with "key: value" HTTP headers.   :decl_configoption:`CPL_CURL_VERBOSE`=YES allows one to see them and more, when combined with ``--debug``.
+Starting with GDAL 2.3, additional HTTP headers can be sent by setting the :decl_configoption:`GDAL_HTTP_HEADER_FILE` configuration option to point to a filename of a text file with "key: value" HTTP headers.   :decl_configoption:`CPL_CURL_VERBOSE` set to ``YES`` allows one to see them and more, when combined with ``--debug``.
 
 Starting with GDAL 2.3, the :decl_configoption:`GDAL_HTTP_MAX_RETRY` (number of attempts) and :decl_configoption:`GDAL_HTTP_RETRY_DELAY` (in seconds) configuration option can be set, so that request retries are done in case of HTTP errors 429, 502, 503 or 504.
 
@@ -196,7 +196,7 @@ Although this file handler is able seek to random offsets in the file, this will
 
 Recognized filenames are of the form :file:`/vsicurl_streaming/http[s]://path/to/remote/resource` or :file:`/vsicurl_streaming/ftp://path/to/remote/resource`, where :file:`path/to/remote/resource` is the URL of a remote resource.
 
-The :decl_configoption:`GDAL_HTTP_PROXY`, :decl_configoption:`GDAL_HTTP_PROXYUSERPWD` and :decl_configoption:`GDAL_PROXY_AUTH` configuration options can be used to define a proxy server. The syntax to use is the one of Curl ``CURLOPT_PROXY``, ``CURLOPT_PROXYUSERPWD`` and ``CURLOPT_PROXYAUTH`` options.
+The :decl_configoption:`GDAL_HTTP_PROXY` (for both HTTP and HTTPS protocols), :decl_configoption:`GDAL_HTTPS_PROXY` (for HTTPS protocol only), :decl_configoption:`GDAL_HTTP_PROXYUSERPWD` and :decl_configoption:`GDAL_PROXY_AUTH` configuration options can be used to define a proxy server. The syntax to use is the one of Curl ``CURLOPT_PROXY``, ``CURLOPT_PROXYUSERPWD`` and ``CURLOPT_PROXYAUTH`` options.
 
 Starting with GDAL 2.1.3, the :decl_configoption:`CURL_CA_BUNDLE` or :decl_configoption:`SSL_CERT_FILE` configuration options can be used to set the path to the Certification Authority (CA) bundle file (if not specified, curl will use a file in a system location).
 

@@ -466,10 +466,6 @@ int GTIFGetGCSInfoEx( void* ctxIn,
         return TRUE;
     }
 
-
-    if( nGCSCode == KvUserDefined )
-        return FALSE;
-
 /* -------------------------------------------------------------------- */
 /*      Search the database.                                            */
 /* -------------------------------------------------------------------- */
@@ -1062,6 +1058,9 @@ int GTIFGetUOMAngleInfoEx( void* ctxIn,
 
         return TRUE;
     }
+
+    if( nUOMAngleCode == KvUserDefined )
+        return FALSE;
 
 /* -------------------------------------------------------------------- */
 /*      Search the units database for this unit.  If we don't find      */

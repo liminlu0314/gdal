@@ -99,16 +99,20 @@ except __builtin__.Exception:
 
 
 have_warned = 0
-def deprecation_warn(module):
+def deprecation_warn(module, sub_package=None):
   global have_warned
 
   if have_warned == 1:
       return
 
   have_warned = 1
+  if sub_package:
+      new_module = sub_package+'.'+module
+  else:
+      new_module = module
 
   from warnings import warn
-  warn('%s.py was placed in a namespace, it is now available as osgeo.%s' % (module,module),
+  warn('%s.py was placed in a namespace, it is now available as osgeo.%s' % (module, new_module),
        DeprecationWarning)
 
 
@@ -2426,6 +2430,11 @@ class Dataset(MajorObject):
         return _gdal.Dataset_SetStyleTable(self, *args)
 
 
+    def AbortSQL(self, *args):
+        """AbortSQL(Dataset self) -> OGRErr"""
+        return _gdal.Dataset_AbortSQL(self, *args)
+
+
     def StartTransaction(self, *args, **kwargs):
         """StartTransaction(Dataset self, int force=False) -> OGRErr"""
         return _gdal.Dataset_StartTransaction(self, *args, **kwargs)
@@ -2441,8 +2450,13 @@ class Dataset(MajorObject):
         return _gdal.Dataset_RollbackTransaction(self, *args)
 
 
+    def ClearStatistics(self, *args):
+        """ClearStatistics(Dataset self)"""
+        return _gdal.Dataset_ClearStatistics(self, *args)
+
+
     def ReadRaster1(self, *args, **kwargs):
-        """ReadRaster1(Dataset self, int xoff, int yoff, int xsize, int ysize, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, int band_list=0, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GIntBig * buf_band_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None) -> CPLErr"""
+        """ReadRaster1(Dataset self, double xoff, double yoff, double xsize, double ysize, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, int band_list=0, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GIntBig * buf_band_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None) -> CPLErr"""
         return _gdal.Dataset_ReadRaster1(self, *args, **kwargs)
 
 
@@ -2748,6 +2762,42 @@ class Group(_object):
 Group_swigregister = _gdal.Group_swigregister
 Group_swigregister(Group)
 
+class Statistics(_object):
+    """Proxy of C++ Statistics class."""
+
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Statistics, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Statistics, name)
+    __repr__ = _swig_repr
+    __swig_getmethods__["min"] = _gdal.Statistics_min_get
+    if _newclass:
+        min = _swig_property(_gdal.Statistics_min_get)
+    __swig_getmethods__["max"] = _gdal.Statistics_max_get
+    if _newclass:
+        max = _swig_property(_gdal.Statistics_max_get)
+    __swig_getmethods__["mean"] = _gdal.Statistics_mean_get
+    if _newclass:
+        mean = _swig_property(_gdal.Statistics_mean_get)
+    __swig_getmethods__["std_dev"] = _gdal.Statistics_std_dev_get
+    if _newclass:
+        std_dev = _swig_property(_gdal.Statistics_std_dev_get)
+    __swig_getmethods__["valid_count"] = _gdal.Statistics_valid_count_get
+    if _newclass:
+        valid_count = _swig_property(_gdal.Statistics_valid_count_get)
+    __swig_destroy__ = _gdal.delete_Statistics
+    __del__ = lambda self: None
+
+    def __init__(self, *args):
+        """__init__(Statistics self) -> Statistics"""
+        this = _gdal.new_Statistics(*args)
+        try:
+            self.this.append(this)
+        except __builtin__.Exception:
+            self.this = this
+Statistics_swigregister = _gdal.Statistics_swigregister
+Statistics_swigregister(Statistics)
+
 class MDArray(_object):
     """Proxy of C++ GDALMDArrayHS class."""
 
@@ -2820,6 +2870,11 @@ class MDArray(_object):
     def Write(self, *args):
         """Write(MDArray self, int nDims1, int nDims2, int nDims3, int nDims4, ExtendedDataType buffer_datatype, GIntBig buf_len) -> CPLErr"""
         return _gdal.MDArray_Write(self, *args)
+
+
+    def AdviseRead(self, *args):
+        """AdviseRead(MDArray self, int nDims1, int nDims2) -> CPLErr"""
+        return _gdal.MDArray_AdviseRead(self, *args)
 
 
     def GetAttribute(self, *args):
@@ -2927,6 +2982,16 @@ class MDArray(_object):
         return _gdal.MDArray_AsClassicDataset(self, *args)
 
 
+    def GetStatistics(self, *args, **kwargs):
+        """GetStatistics(MDArray self, Dataset ds=None, bool approx_ok=False, bool force=True, GDALProgressFunc callback=0, void * callback_data=None) -> Statistics"""
+        return _gdal.MDArray_GetStatistics(self, *args, **kwargs)
+
+
+    def ComputeStatistics(self, *args, **kwargs):
+        """ComputeStatistics(MDArray self, Dataset ds=None, bool approx_ok=False, GDALProgressFunc callback=0, void * callback_data=None) -> Statistics"""
+        return _gdal.MDArray_ComputeStatistics(self, *args, **kwargs)
+
+
     def Read(self,
              array_start_idx = None,
              count = None,
@@ -2961,6 +3026,13 @@ class MDArray(_object):
 
         from osgeo import gdalnumeric
         return gdalnumeric.MDArrayReadAsArray(self, array_start_idx, count, array_step, buffer_datatype, buf_obj)
+
+    def AdviseRead(self, array_start_idx = None, count = None):
+        if not array_start_idx:
+          array_start_idx = [0] * self.GetDimensionCount()
+        if not count:
+          count = [ (self.GetDimensions()[i].GetSize() - array_start_idx[i]) for i in range (self.GetDimensionCount()) ]
+        return _gdal.MDArray_AdviseRead(self, array_start_idx, count)
 
     def __getitem__(self, item):
 
@@ -3038,6 +3110,32 @@ class MDArray(_object):
 
         from osgeo import gdalnumeric
         return gdalnumeric.MDArrayWriteArray(self, array, array_start_idx, array_step)
+
+    def ReadAsMaskedArray(self,
+                    array_start_idx = None,
+                    count = None,
+                    array_step = None):
+        """ Return a numpy masked array of ReadAsArray() with GetMask() """
+        import numpy
+        mask = self.GetMask()
+        if mask is not None:
+            array = self.ReadAsArray(array_start_idx, count, array_step)
+            mask_array = mask.ReadAsArray(array_start_idx, count, array_step)
+            bool_array = ~mask_array.astype(numpy.bool)
+            return numpy.ma.array(array, mask=bool_array)
+        else:
+            return numpy.ma.array(self.ReadAsArray(array_start_idx, count, array_step), mask=None)
+
+    def GetShape(self):
+      """ Return the shape of the array """
+      if not self.GetDimensionCount():
+        return None
+      shp = ()
+      for dim in self.GetDimensions():
+        shp += (dim.GetSize(),)
+      return shp
+
+    shape = property(fget=GetShape, doc='Returns the shape of the array.')
 
 
 MDArray_swigregister = _gdal.MDArray_swigregister

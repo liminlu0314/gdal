@@ -504,13 +504,19 @@ def test_gpkg_4(tile_drv_name='PNG'):
     out_ds = gdal.Open('/vsimem/tmp.gpkg')
     expected_cs.append(30658)
     got_cs = [out_ds.GetRasterBand(i + 1).Checksum() for i in range(4)]
-    assert got_cs in (expected_cs, [22290, 21651, 21551, 30658])
+    assert got_cs in (expected_cs,
+                      [22290, 21651, 21551, 30658],
+                      [22286, 21645, 21764, 30658], # libwebp 1.0.3
+                      )
     check_tile_format(out_ds, tile_drv_name, working_bands, False)
     out_ds = None
 
     ds = gdal.OpenEx('/vsimem/tmp.gpkg', open_options=['USE_TILE_EXTENT=YES'])
     got_cs = [ds.GetRasterBand(i + 1).Checksum() for i in range(4)]
-    assert got_cs in (clamped_expected_cs, [56886, 43228, 56508, 30638])
+    assert got_cs in (clamped_expected_cs,
+                      [56886, 43228, 56508, 30638],
+                      [30478, 31718, 31360, 30638], # libwebp 1.0.3
+                      )
     ds = None
 
     gdal.Unlink('/vsimem/tmp.gpkg')
@@ -1420,15 +1426,6 @@ def test_gpkg_17():
     gdal.SetConfigOption('ALLOW_GPKG_ZOOM_OTHER_EXTENSION', 'NO')
     ret = out_ds.BuildOverviews('NEAR', [2, 4])
     gdal.SetConfigOption('ALLOW_GPKG_ZOOM_OTHER_EXTENSION', None)
-    gdal.PopErrorHandler()
-    assert ret != 0
-    out_ds = None
-
-    # Test gpkg_zoom_other extension
-    out_ds = gdal.OpenEx('/vsimem/tmp.gpkg', gdal.OF_RASTER | gdal.OF_UPDATE)
-    # Will fail because results in a 6x6 overview
-    gdal.PushErrorHandler()
-    ret = out_ds.BuildOverviews('NEAR', [3])
     gdal.PopErrorHandler()
     assert ret != 0
     out_ds = None
@@ -2669,8 +2666,9 @@ def test_gpkg_39():
     gdal.Translate('/vsimem/gpkg_39.gpkg', src_ds, format='GPKG', noData=74, creationOptions=['TILE_FORMAT=PNG'])
     ds = gdal.Open('/vsimem/gpkg_39.gpkg')
     assert ds.GetRasterBand(1).DataType == gdal.GDT_Float32
+    assert ds.GetRasterBand(1).GetNoDataValue() == pytest.approx(-3.4028234663852885981e+38, rel=1e-8)
     cs = ds.GetRasterBand(1).Checksum()
-    assert cs == 4680
+    assert cs == 4651
     sql_lyr = ds.ExecuteSQL('SELECT scale, offset FROM gpkg_2d_gridded_tile_ancillary')
     f = sql_lyr.GetNextFeature()
     assert f['scale'] != 1.0 and f.IsFieldSetAndNotNull('scale')
@@ -3348,6 +3346,31 @@ def test_gpkg_50000_50000_uint16():
     assert data
     ref_ds = gdal.Open('../gcore/data/uint16.tif')
     assert data == ref_ds.ReadRaster()
+
+
+###############################################################################
+# Test writing PNG tiles with negative values
+
+
+def test_gpkg_float32_png_negative_values():
+
+    if gdaltest.gpkg_dr is None:
+        pytest.skip()
+    if gdaltest.png_dr is None:
+        pytest.skip()
+
+    gdal.Unlink('/vsimem/tmp.gpkg')
+
+    ds = gdaltest.gpkg_dr.Create('/vsimem/tmp.gpkg', 1, 1, 1, gdal.GDT_Float32, options=['TILE_FORMAT=PNG'])
+    ds.SetGeoTransform([0, 1, 0, 0, 0, -1])
+    ds.GetRasterBand(1).SetNoDataValue(-32768)
+    ds.GetRasterBand(1).Fill(-10)
+    ds = None
+    ds = gdal.Open('/vsimem/tmp.gpkg')
+    assert ds.GetRasterBand(1).ComputeRasterMinMax() == (-10, -10)
+    ds = None
+
+    gdal.Unlink('/vsimem/tmp.gpkg')
 
 ###############################################################################
 #
