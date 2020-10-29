@@ -63,8 +63,7 @@ CPU_COUNT=%NUMBER_OF_PROCESSORS%
 # But the paths *should* be absolute (relative paths mess up in submakefiles).
 
 !IFNDEF GDAL_HOME
-GDAL_HOME = "E:\RpcBaDir\3rdPart_x64\gdal"
-#GDAL_HOME = "D:\RasterAlg\3rdPart\gdal3"
+GDAL_HOME = "E:\Src\RpcBaDir\3rdPart_x64\gdal"
 !ENDIF
 !IFNDEF BINDIR
 BINDIR = "$(GDAL_HOME)\bin"
