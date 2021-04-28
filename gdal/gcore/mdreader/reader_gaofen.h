@@ -30,11 +30,7 @@
 #ifndef READER_GAOFEN_H_INCLUDED
 #define READER_GAOFEN_H_INCLUDED
 
-<<<<<<< HEAD
 #include "../gdal_mdreader.h"
-=======
-#include "reader_pleiades.h"
->>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
 /**
 Metadata reader for GaoFen
@@ -67,4 +63,3 @@ protected:
 };
 
 #endif // READER_GAOFEN_H_INCLUDED
-

@@ -269,4 +269,4 @@ devinstall: install libinstall
 	copy gnm\gnm_api.h $(INCDIR)
     copy gnm\gnmgraph.h $(INCDIR)
 !ENDIF
-	copy apps\gdal_utils.h $(INCDIR)
+	copy apps\*.h $(INCDIR)
