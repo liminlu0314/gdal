@@ -2,8 +2,11 @@
 
 set -e
 
-export PYTHONPATH=$PWD/gdal/swig/python/build/lib.macosx-10.13-x86_64-2.7:$PWD/gdal/swig/python/build/lib.macosx-10.15-x86_64-3.8
+export PYTHONPATH=$PWD/gdal/swig/python/build/lib.macosx-10.9-x86_64-3.8
 export PYTEST="python3 -m pytest -vv -p no:sugar --color=no"
+export DYLD_LIBRARY_PATH=$HOME/install-gdal/lib
+export GDAL_DATA=$HOME/install-gdal/share/gdal
+export PROJ_NETWORK=ON
 
 echo 'Running CPP unit tests'
 (cd autotest/cpp && make quick_test)
@@ -23,4 +26,4 @@ $PYTEST
 
 # For some reason, the tests crash at process exit
 # (cd autotest; $PYTEST 2>&1 | tee /tmp/log.txt || /bin/true)
-# tail /tmp/log.txt | grep "Failed:    0 (0 blew exceptionss)"  >/dev/null
+# tail /tmp/log.txt | grep "Failed:    0 (0 blew exceptions)"  >/dev/null

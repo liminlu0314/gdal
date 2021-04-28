@@ -649,10 +649,8 @@ def test_tiff_12bitjpeg():
     gdal.PopErrorHandler()
     gdal.SetConfigOption('CPL_ACCUM_ERROR_MSG', old_accum)
 
-    if gdal.GetLastErrorMsg().find(
-            'Unsupported JPEG data precision 12') != -1:
-        sys.stdout.write('(12bit jpeg not available) ... ')
-        pytest.skip()
+    if gdal.GetLastErrorMsg().find('Unsupported JPEG data precision 12') != -1:
+        pytest.skip('12bit jpeg not available')
     elif ds is None:
         pytest.fail('failed to open 12bit jpeg file with unexpected error')
 
@@ -742,7 +740,7 @@ Definition Table
     assert gt == (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0), \
         'did not get expected geotransform'
 
-    assert wkt.find('OSGB_1936') != -1, 'did not get expected SRS'
+    assert '_1936' in wkt, 'did not get expected SRS'
 
 ###############################################################################
 # Test reading PixelIsPoint file.
@@ -1215,16 +1213,9 @@ def test_tiff_direct_and_virtual_mem_io():
             data = src_ds.ReadRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize, buf_type=dt)
             new_vals = []
             for i in range(4 * src_ds.RasterXSize * src_ds.RasterYSize):
-                if sys.version_info >= (3, 0, 0):
-                    new_vals.append(chr(data[2 * i]).encode('latin1'))
-                    new_vals.append(chr(255 - data[2 * i]).encode('latin1'))
-                else:
-                    new_vals.append(data[2 * i])
-                    new_vals.append(chr(255 - ord(data[2 * i])))
-            if sys.version_info >= (3, 0, 0):
-                data = ''.encode('latin1').join(new_vals)
-            else:
-                data = ''.join(new_vals)
+                new_vals.append(chr(data[2 * i]).encode('latin1'))
+                new_vals.append(chr(255 - data[2 * i]).encode('latin1'))
+            data = b''.join(new_vals)
             mem_ds.WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize, data, buf_type=dt)
             src_ds = mem_ds
         elif dt == gdal.GDT_CInt16:
@@ -1233,20 +1224,11 @@ def test_tiff_direct_and_virtual_mem_io():
             data = src_ds.ReadRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize, buf_type=dt)
             new_vals = []
             for i in range(4 * src_ds.RasterXSize * src_ds.RasterYSize):
-                if sys.version_info >= (3, 0, 0):
-                    new_vals.append(chr(data[4 * i]).encode('latin1'))
-                    new_vals.append(chr(data[4 * i]).encode('latin1'))
-                    new_vals.append(chr(255 - data[4 * i]).encode('latin1'))
-                    new_vals.append(chr(255 - data[4 * i]).encode('latin1'))
-                else:
-                    new_vals.append(data[4 * i])
-                    new_vals.append(data[4 * i])
-                    new_vals.append(chr(255 - ord(data[4 * i])))
-                    new_vals.append(chr(255 - ord(data[4 * i])))
-            if sys.version_info >= (3, 0, 0):
-                data = ''.encode('latin1').join(new_vals)
-            else:
-                data = ''.join(new_vals)
+                new_vals.append(chr(data[4 * i]).encode('latin1'))
+                new_vals.append(chr(data[4 * i]).encode('latin1'))
+                new_vals.append(chr(255 - data[4 * i]).encode('latin1'))
+                new_vals.append(chr(255 - data[4 * i]).encode('latin1'))
+            data = b''.join(new_vals)
             mem_ds.WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize, data, buf_type=dt)
             src_ds = mem_ds
 
@@ -1950,7 +1932,7 @@ def test_tiff_read_md11():
 
 def test_tiff_read_md12():
 
-    ds = gdal.Open('../gdrivers/data/dimap2/IMG_foo_R2C1.TIF', gdal.GA_ReadOnly)
+    ds = gdal.Open('../gdrivers/data/dimap2/single_component/IMG_foo_R2C1.TIF', gdal.GA_ReadOnly)
     filelist = ds.GetFileList()
 
     assert len(filelist) == 3, 'did not get expected file list.'
@@ -1977,9 +1959,9 @@ def test_tiff_read_md12():
     assert not os.path.exists('data/md_kompsat.tif.aux.xml')
 
     # Test not valid DIMAP product [https://github.com/OSGeo/gdal/issues/431]
-    shutil.copy('../gdrivers/data/dimap2/IMG_foo_R2C1.TIF', 'tmp/IMG_foo_temp.TIF')
-    shutil.copy('../gdrivers/data/dimap2/DIM_foo.XML', 'tmp/DIM_foo.XML')
-    shutil.copy('../gdrivers/data/dimap2/RPC_foo.XML', 'tmp/RPC_foo.XML')
+    shutil.copy('../gdrivers/data/dimap2/single_component/IMG_foo_R2C1.TIF', 'tmp/IMG_foo_temp.TIF')
+    shutil.copy('../gdrivers/data/dimap2/single_component/DIM_foo.XML', 'tmp/DIM_foo.XML')
+    shutil.copy('../gdrivers/data/dimap2/single_component/RPC_foo.XML', 'tmp/RPC_foo.XML')
     ds = gdal.Open('tmp/IMG_foo_temp.TIF', gdal.GA_ReadOnly)
     filelist = ds.GetFileList()
     ds = None
@@ -1998,15 +1980,12 @@ def test_tiff_read_empty_nodata_tag():
     ds = gdal.Open('data/empty_nodata.tif')
     assert ds.GetRasterBand(1).GetNoDataValue() is None
 
+
 ###############################################################################
 # Check that no auxiliary files are read with a simple Open(), reading
 # imagery and getting IMAGE_STRUCTURE metadata
-
-
+@pytest.mark.skipif(sys.platform != 'linux', reason='Incorrect platform')
 def test_tiff_read_strace_check():
-
-    if not sys.platform.startswith('linux'):
-        pytest.skip()
 
     python_exe = sys.executable
     cmd = "strace -f %s -c \"from osgeo import gdal; " % python_exe + (
@@ -2209,7 +2188,7 @@ def test_tiff_read_nogeoref():
 
     tests = [(None, True, True, False, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              (None, True, True, True, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
-             (None, False, True, True, 'OSGB_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
+             (None, False, True, True, '_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
              (None, True, False, False, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              (None, False, True, False, '', (99.5, 1.0, 0.0, 200.5, 0.0, -1.0)),
              (None, False, False, False, '', (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)),
@@ -2220,7 +2199,7 @@ def test_tiff_read_nogeoref():
              ('INTERNAL,WORLDFILE,PAM', True, True, True, 'LOCAL_CS["PAM"]', (99.5, 1.0, 0.0, 200.5, 0.0, -1.0)),
              ('WORLDFILE,PAM,INTERNAL', False, False, True, '', (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)),
              ('PAM,WORLDFILE,INTERNAL', False, False, True, '', (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)),
-             ('TABFILE,WORLDFILE,INTERNAL', True, True, True, 'OSGB_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
+             ('TABFILE,WORLDFILE,INTERNAL', True, True, True, '_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
              ('PAM', True, True, False, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              ('PAM,WORLDFILE', True, True, False, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              ('WORLDFILE', True, True, False, '', (99.5, 1.0, 0.0, 200.5, 0.0, -1.0)),
@@ -2288,8 +2267,8 @@ def test_tiff_read_inconsistent_georef():
              ('PAM', True, True, True, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              ('PAM,TABFILE', True, True, True, 'LOCAL_CS["PAM"]', (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
              ('WORLDFILE', True, True, True, '', (99.5, 1.0, 0.0, 200.5, 0.0, -1.0)),
-             ('TABFILE', True, True, True, 'OSGB_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
-             ('TABFILE,PAM', True, True, True, 'OSGB_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
+             ('TABFILE', True, True, True, '_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
+             ('TABFILE,PAM', True, True, True, '_1936', (400000.0, 25.0, 0.0, 1300000.0, 0.0, -25.0)),
             ]
 
     for (config_option_value, copy_pam, copy_worldfile, copy_tabfile, expected_srs, expected_gt) in tests:
@@ -2759,10 +2738,6 @@ def test_tiff_read_huge_implied_number_strips():
 
 
 def test_tiff_read_many_blocks():
-
-    # Runs super slow on some Windows configs
-    if sys.platform == 'win32':
-        pytest.skip()
 
     md = gdal.GetDriverByName('GTiff').GetMetadata()
     if md['LIBTIFF'] != 'INTERNAL':
@@ -3496,6 +3471,9 @@ def test_tiff_read_geodetic_tiff_grid():
 # related to precomposed vs decomposed UTF-8 filenames on MacOSX
 
 def test_tiff_read_utf8_encoding_issue_2903():
+
+    if gdaltest.is_travis_branch('mingw_w64'):
+        pytest.skip()
 
     precomposed_utf8 = b'\xc3\xa4'.decode('utf-8')
     tmp_tif_filename = 'tmp/%s.tif' % precomposed_utf8

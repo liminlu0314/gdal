@@ -138,7 +138,21 @@ The **dataAxisToSRSAxisMapping** attribute is allowed since GDAL 3.0 to describe
 VRTRasterBand
 +++++++++++++
 
-It will have a dataType attribute with the type of the pixel data associated with this band (use names Byte, UInt16, Int16, UInt32, Int32, Float32, Float64, CInt16, CInt32, CFloat32 or CFloat64) and the band this element represents (1 based).  This element may have Metadata, ColorInterp, NoDataValue, HideNoDataValue, ColorTable, GDALRasterAttributeTable, Description and MaskBand subelements as well as the various kinds of source elements such as SimpleSource, ComplexSource, etc.  A raster band may have many "sources" indicating where the actual raster data should be fetched from, and how it should be mapped into the raster bands pixel space.
+The attributes for VRTRasterBand are:
+
+- **dataType** (optional): type of the pixel data associated with this band (use
+  names Byte, UInt16, Int16, UInt32, Int32, Float32, Float64, CInt16, CInt32, CFloat32 or CFloat64).
+  If not specified, defaults to 1
+ 
+- **band** (optional): band number this element represents (1 based).
+
+- **blockXSize** (optional, GDAL >= 3.3): block width.
+  If not specified, defaults to the minimum of the raster width and 128.
+
+- **blockYSize** (optional, GDAL >= 3.3): block height.
+  If not specified, defaults to the minimum of the raster height and 128.
+
+This element may have Metadata, ColorInterp, NoDataValue, HideNoDataValue, ColorTable, GDALRasterAttributeTable, Description and MaskBand subelements as well as the various kinds of source elements such as SimpleSource, ComplexSource, etc.  A raster band may have many "sources" indicating where the actual raster data should be fetched from, and how it should be mapped into the raster bands pixel space.
 
 The allowed subelements for VRTRasterBand are :
 
@@ -148,7 +162,7 @@ The allowed subelements for VRTRasterBand are :
 
   <ColorInterp>Gray</ColorInterp>:
 
-- **NoDataValue**: If this element exists a raster band has a nodata value associated with, of the value given as data in the element.
+- **NoDataValue**: If this element exists a raster band has a nodata value associated with, of the value given as data in the element. This must not be confused with the NODATA element of a VRTComplexSource element.
 
 .. code-block:: xml
 
@@ -257,7 +271,7 @@ The allowed subelements for VRTRasterBand are :
 
 - **AveragedSource**: The AveragedSource is derived from the SimpleSource and shares the same properties except that it uses an averaging resampling instead of a nearest neighbour algorithm as in SimpleSource, when the size of the destination rectangle is not the same as the size of the source rectangle. Note: a more general mechanism to specify resampling algorithms can be used. See above paragraph about the 'resampling' attribute.
 
-- **ComplexSource**: The ComplexSource_ is derived from the SimpleSource (so it shares the SourceFilename, SourceBand, SrcRect and DestRect elements), but it provides support to rescale and offset the range of the source values. Certain regions of the source can be masked by specifying the NODATA value.
+- **ComplexSource**: The ComplexSource_ is derived from the SimpleSource (so it shares the SourceFilename, SourceBand, SrcRect and DestRect elements), but it provides support to rescale and offset the range of the source values. Certain regions of the source can be masked by specifying the NODATA value, or starting with GDAL 3.3, with the <UseMaskBand>true</UseMaskBand> element.
 
 - **KernelFilteredSource**: The KernelFilteredSource_ is a pixel source derived from the Simple Source (so it shares the SourceFilename, SourceBand, SrcRect and DestRect elements, but it also passes the data through a simple filtering kernel specified with the Kernel element.
 
@@ -277,12 +291,6 @@ rectangle of source data should be mapped into the VRTRasterBands space.
 The relativeToVRT attribute on the SourceFilename indicates whether the
 filename should be interpreted as relative to the .vrt file (value is 1)
 or not relative to the .vrt file (value is 0).  The default is 0.
-
-The shared attribute, on the SourceFilename indicates whether the
-dataset should be shared (value is 1) or not (value is 0). The default is 1.
-If several VRT datasets referring to the same underlying sources are used in a multithreaded context,
-shared should be set to 0. Alternatively, the VRT_SHARED_SOURCE configuration
-option can be set to 0 to force non-shared mode.
 
 Some characteristics of the source band can be specified in the optional
 SourceProperties tag to enable the VRT driver to differ the opening of the source
@@ -367,7 +375,10 @@ the blue band or 4 for the alpha band.
 When transforming the source values the operations are executed
 in the following order:
 
-- Nodata masking
+- Masking, if the NODATA element is set or, starting with GDAL 3.3,
+  if the UseMaskBand is set to true and the source band has a mask band.
+  Note that this is binary masking only, so no alpha blending is done if the
+  mask band is actually an alpha band with non-0 or non-255 values.
 - Color table expansion
 - For linear scaling, applying the scale ratio, then scale offset
 - For non-linear scaling, apply (DstMax-DstMin) * pow( (SrcValue-SrcMin) / (SrcMax-SrcMin), Exponent) + DstMin
@@ -382,7 +393,7 @@ in the following order:
       <ScaleRatio>1</ScaleRatio>
       <ColorTableComponent>1</ColorTableComponent>
       <LUT>0:0,2345.12:64,56789.5:128,2364753.02:255</LUT>
-      <NODATA>0</NODATA>
+      <NODATA>0</NODATA>  <!-- if the mask is a mask or alpha band, use <UseMaskBand>true</UseMaskBand> -->
       <SrcRect xOff="0" yOff="0" xSize="512" ySize="512"/>
       <DstRect xOff="0" yOff="0" xSize="512" ySize="512"/>
     </ComplexSource>

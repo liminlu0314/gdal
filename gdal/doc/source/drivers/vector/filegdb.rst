@@ -60,6 +60,11 @@ Special SQL requests
 can be used as special SQL requests to get respectively the definition
 and metadata of a FileGDB table as XML content.
 
+Field domains
+~~~~~~~~~~~~~
+
+(GDAL >= 3.3) Coded and range field domains are supported.
+
 Transaction support
 -------------------
 
@@ -174,7 +179,7 @@ Known Issues
 -  The SDK is known to be unable to open layers with particular spatial
    reference systems. This might be the case if messages "FGDB: Error
    opening XXXXXXX. Skipping it (Invalid function arguments.)" when
-   running "ogrinfo --debug on the.gdb" (reported as warning in GDAL
+   running ``ogrinfo --debug on the.gdb`` (reported as warning in GDAL
    2.0). Using the OpenFileGDB driver will generally solve that issue.
 -  FGDB coordinate snapping will cause geometries to be altered during
    writing. Use the origin and scale layer creation options to control

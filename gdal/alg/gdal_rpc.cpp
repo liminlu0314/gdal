@@ -74,11 +74,33 @@ constexpr double DEFAULT_PIX_ERR_THRESHOLD = 0.1;
 /*      Turn an RPCInfo structure back into its metadata format.        */
 /************************************************************************/
 
-char ** RPCInfoToMD( GDALRPCInfo *psRPCInfo )
+char ** RPCInfoV1ToMD( GDALRPCInfoV1 *psRPCInfo )
+
+{
+    GDALRPCInfoV2 sRPCInfo;
+    memcpy(&sRPCInfo, psRPCInfo, sizeof(GDALRPCInfoV1));
+    sRPCInfo.dfERR_BIAS = std::numeric_limits<double>::quiet_NaN();
+    sRPCInfo.dfERR_RAND = std::numeric_limits<double>::quiet_NaN();
+    return RPCInfoV2ToMD(&sRPCInfo);
+}
+
+char ** RPCInfoV2ToMD( GDALRPCInfoV2 *psRPCInfo )
 
 {
     char **papszMD = nullptr;
     CPLString osField, osMultiField;
+
+    if( !std::isnan(psRPCInfo->dfERR_BIAS) )
+    {
+        osField.Printf( "%.15g", psRPCInfo->dfERR_BIAS );
+        papszMD = CSLSetNameValue( papszMD, RPC_ERR_BIAS, osField );
+    }
+
+    if( !std::isnan(psRPCInfo->dfERR_RAND) )
+    {
+        osField.Printf( "%.15g", psRPCInfo->dfERR_RAND );
+        papszMD = CSLSetNameValue( papszMD, RPC_ERR_RAND, osField );
+    }
 
     osField.Printf( "%.15g", psRPCInfo->dfLINE_OFF );
     papszMD = CSLSetNameValue( papszMD, RPC_LINE_OFF, osField );
@@ -217,7 +239,7 @@ typedef struct {
 
     GDALTransformerInfo sTI;
 
-    GDALRPCInfo sRPC;
+    GDALRPCInfoV2 sRPC;
 
     double      adfPLToLatLongGeoTransform[6];
     double      dfRefZ;
@@ -492,8 +514,8 @@ void* GDALCreateSimilarRPCTransformer( void *hTransformArg,
     GDALRPCTransformInfo *psInfo =
         static_cast<GDALRPCTransformInfo *>(hTransformArg);
 
-    GDALRPCInfo sRPC;
-    memcpy(&sRPC, &(psInfo->sRPC), sizeof(GDALRPCInfo));
+    GDALRPCInfoV2 sRPC;
+    memcpy(&sRPC, &(psInfo->sRPC), sizeof(GDALRPCInfoV2));
 
     if( dfRatioX != 1.0 || dfRatioY != 1.0 )
     {
@@ -527,7 +549,7 @@ void* GDALCreateSimilarRPCTransformer( void *hTransformArg,
                                    CPLSPrintf("%d", psInfo->nMaxIterations));
 
     GDALRPCTransformInfo* psNewInfo =
-        static_cast<GDALRPCTransformInfo*>(GDALCreateRPCTransformer(
+        static_cast<GDALRPCTransformInfo*>(GDALCreateRPCTransformerV2(
             &sRPC, psInfo->bReversed, psInfo->dfPixErrThreshold, papszOptions));
     CSLDestroy(papszOptions);
 
@@ -635,6 +657,20 @@ retry:
 /************************************************************************/
 /*                      GDALCreateRPCTransformer()                      */
 /************************************************************************/
+
+
+void *GDALCreateRPCTransformerV1( GDALRPCInfoV1 *psRPCInfo, int bReversed,
+                                double dfPixErrThreshold,
+                                char **papszOptions )
+
+{
+    GDALRPCInfoV2 sRPCInfo;
+    memcpy(&sRPCInfo, psRPCInfo, sizeof(GDALRPCInfoV1));
+    sRPCInfo.dfERR_BIAS = std::numeric_limits<double>::quiet_NaN();
+    sRPCInfo.dfERR_RAND = std::numeric_limits<double>::quiet_NaN();
+    return GDALCreateRPCTransformerV2(&sRPCInfo, bReversed, dfPixErrThreshold,
+                                      papszOptions);
+}
 
 /**
  * Create an RPC based transformer.
@@ -788,7 +824,7 @@ retry:
  * @return transformer callback data (deallocate with GDALDestroyTransformer()).
  */
 
-void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
+void *GDALCreateRPCTransformerV2( const GDALRPCInfoV2 *psRPCInfo, int bReversed,
                                 double dfPixErrThreshold,
                                 char **papszOptions )
 
@@ -799,7 +835,7 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
     GDALRPCTransformInfo *psTransform = static_cast<GDALRPCTransformInfo *>(
         CPLCalloc(sizeof(GDALRPCTransformInfo), 1));
 
-    memcpy( &(psTransform->sRPC), psRPCInfo, sizeof(GDALRPCInfo) );
+    memcpy( &(psTransform->sRPC), psRPCInfo, sizeof(GDALRPCInfoV2) );
     psTransform->bReversed = bReversed;
     const char* pszPixErrThreshold =
         CSLFetchNameValue( papszOptions, "RPC_PIXEL_ERROR_THRESHOLD" );
@@ -961,7 +997,7 @@ void *GDALCreateRPCTransformer( GDALRPCInfo *psRPCInfo, int bReversed,
             if( OGRHasPreparedGeometrySupport() )
             {
                 psTransform->poRPCFootprintPreparedGeom =
-                    OGRCreatePreparedGeometry(psTransform->poRPCFootprintGeom);
+                    OGRCreatePreparedGeometry(OGRGeometry::ToHandle(psTransform->poRPCFootprintGeom));
             }
             else
             {
@@ -1721,7 +1757,7 @@ static bool RPCIsValidLongLat( const GDALRPCTransformInfo *psTransform,
     OGRPoint p(dfLong, dfLat);
     return CPL_TO_BOOL(
         OGRPreparedGeometryContains(psTransform->poRPCFootprintPreparedGeom,
-                                       &p));
+                                    OGRGeometry::ToHandle(&p)));
 }
 
 /************************************************************************/
@@ -2424,7 +2460,7 @@ CPLXMLNode *GDALSerializeRPCTransformer( void *pTransformArg )
 /* -------------------------------------------------------------------- */
 /*      RPC metadata.                                                   */
 /* -------------------------------------------------------------------- */
-    char **papszMD = RPCInfoToMD( &(psInfo->sRPC) );
+    char **papszMD = RPCInfoV2ToMD( &(psInfo->sRPC) );
     CPLXMLNode *psMD= CPLCreateXMLNode( psTree, CXT_Element,
                                         "Metadata" );
 
@@ -2484,8 +2520,8 @@ void *GDALDeserializeRPCTransformer( CPLXMLNode *psTree )
                              psMDI->psChild->psNext->pszValue );
     }
 
-    GDALRPCInfo sRPC;
-    if( !GDALExtractRPCInfo( papszMD, &sRPC ) )
+    GDALRPCInfoV2 sRPC;
+    if( !GDALExtractRPCInfoV2( papszMD, &sRPC ) )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
                   "Failed to reconstitute RPC transformer." );
@@ -2540,7 +2576,7 @@ void *GDALDeserializeRPCTransformer( CPLXMLNode *psTree )
 /*      Generate transformation.                                        */
 /* -------------------------------------------------------------------- */
     void *pResult =
-        GDALCreateRPCTransformer( &sRPC, bReversed, dfPixErrThreshold,
+        GDALCreateRPCTransformerV2( &sRPC, bReversed, dfPixErrThreshold,
                                   papszOptions );
 
     CSLDestroy( papszOptions );

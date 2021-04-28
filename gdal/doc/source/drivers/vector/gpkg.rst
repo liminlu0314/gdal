@@ -178,15 +178,24 @@ the database into a UTF-8 mode for text handling, satisfying the OGR
 strict UTF-8 capability. For pre-existing files, the driver will work
 with whatever it is given.
 
+The driver updates the GeoPackage ``last_change`` timestamp when the file is
+created or modified. If consistent binary output is required for
+reproducibility, the timestamp can be forced to a specific value by setting the
+:decl_configoption:`OGR_CURRENT_DATE` global configuration option.
+When setting the option, take care to meet the specific time format
+requirement of the GeoPackage standard,
+e.g. `for version 1.2 <https://www.geopackage.org/spec120/#r15>`__.
+
 Dataset Creation Options
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 The following creation options (specific to vector, or common with
 raster) are available:
 
--  **VERSION**\ =AUTO/1.0/1.1/1.2: (GDAL >= 2.2) Set GeoPackage version
+-  **VERSION**\ =AUTO/1.0/1.1/1.2/1.3: (GDAL >= 2.2) Set GeoPackage version
    (for application_id and user_version fields). In AUTO mode, this will
    be equivalent to 1.2 starting with GDAL 2.3.
+   1.3 is available starting with GDAL 3.3
 -  **ADD_GPKG_OGR_CONTENTS**\ =YES/NO: (GDAL >= 2.2) Defines whether to
    add a gpkg_ogr_contents table to keep feature count, and associated
    triggers. Defaults to YES.
@@ -229,19 +238,22 @@ Layer Creation Options
    in the contents table.
 -  **DESCRIPTION**\ =string: Description of the layer, as
    put in the contents table.
--  **ASPATIAL_VARIANT**\ =GPKG_ATTRIBUTES/OGR_ASPATIAL/NOT_REGISTERED:
+-  **ASPATIAL_VARIANT**\ =GPKG_ATTRIBUTES/NOT_REGISTERED:
    (GDAL >=2.2) How to register non spatial tables. Defaults to
    GPKG_ATTRIBUTES in GDAL 2.2 or later (behavior in previous version
    was equivalent to OGR_ASPATIAL). Starting with GeoPackage 1.2, non
    spatial tables are part of the specification. They are recorded with
    data_type="attributes" in the gpkg_contents table. This is only
-   compatible of GDAL 2.2 or later. Priorly, in OGR 2.0 and 2.1, the
-   "aspatial" extension had been developed for similar purposes, so if
-   selecting OGR_ASPATIAL, non spatial tables will be recorded with
-   data_type="aspatial" and the "aspatial" extension was declared in the
-   gpkg_extensions table. It is also possible to use the NOT_REGISTERED
+   compatible of GDAL 2.2 or later.
+   It is also possible to use the NOT_REGISTERED
    option, in which case the non spatial table is not registered at all
    in any GeoPackage system tables.
+   Priorly, in OGR 2.0 and 2.1, the "aspatial" extension had been developed for
+   similar purposes, so if selecting OGR_ASPATIAL, non spatial tables will be
+   recorded with data_type="aspatial" and the "aspatial" extension was declared in the
+   gpkg_extensions table. Starting with GDAL 3.3, OGR_ASPATIAL is no longer
+   available on creation.
+
 
 Metadata
 --------
@@ -320,7 +332,7 @@ example with "ogrinfo --format GPKG")
 Level of support of GeoPackage Extensions
 -----------------------------------------
 
-(Restricted to those have a vector scope)
+(Restricted to those that have a vector scope)
 
 .. list-table:: Extensions
    :header-rows: 1
@@ -339,7 +351,7 @@ Level of support of GeoPackage Extensions
      - Yes
    * - `Schema <http://www.geopackage.org/guidance/extensions/schema.html>`__
      - Yes
-     - No
+     - Yes, since GDAL 3.3 (Geopackage constraints exposed as field domains)
    * - `WKT for Coordinate Reference Systems <http://www.geopackage.org/guidance/extensions/wkt_for_crs.md>`__ (WKT v2)
      - Yes
      -  Partially, since GDAL 2.2. GDAL can read databases using this extension, but cannot interpret a SRS entry that has only a WKT v2 entry.

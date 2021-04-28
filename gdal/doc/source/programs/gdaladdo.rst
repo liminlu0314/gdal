@@ -15,7 +15,7 @@ Synopsis
 
 .. code-block::
 
-    gdaladdo [-r {nearest,average,gauss,cubic,cubicspline,lanczos,average_magphase,mode}]
+    gdaladdo [-r {nearest,average,rms,bilinear,gauss,cubic,cubicspline,lanczos,average_magphase,mode}]
             [-b band]* [-minsize val]
             [-ro] [-clean] [-oo NAME=VALUE]* [--help-general] filename [levels]
 
@@ -27,13 +27,15 @@ most supported file formats with one of several downsampling algorithms.
 
 .. program:: gdaladdo
 
-.. option:: -r {nearest (default),average,gauss,cubic,cubicspline,lanczos,average_magphase,mode}
+.. option:: -r {nearest (default),average,rms,gauss,cubic,cubicspline,lanczos,average_magphase,mode}
 
     Select a resampling algorithm.
 
     ``nearest`` applies a nearest neighbour (simple sampling) resampler
 
     ``average`` computes the average of all non-NODATA contributing pixels. Starting with GDAL 3.1, this is a weighted average taking into account properly the weight of source pixels not contributing fully to the target pixel.
+
+    ``rms`` computes the root mean squared / quadratic mean of all non-NODATA contributing pixels (GDAL >= 3.3)
 
     ``bilinear`` applies a bilinear convolution kernel.
 
@@ -166,7 +168,7 @@ Setting blocksize in Geotiff overviews
 Example: ``--config GDAL_TIFF_OVR_BLOCKSIZE 256``
 
 Default value is 128, or starting with GDAL 3.1, if creating overviews on a tiled GeoTIFF file, the tile size of the full resolution image.
-Note: without this setting, the file can have the full resoultion image with a blocksize different from overviews blocksize.(e.g. full resolution image at blocksize 256, overviews at blocksize 128)
+Note: without this setting, the file can have the full resolution image with a blocksize different from overviews blocksize.(e.g. full resolution image at blocksize 256, overviews at blocksize 128)
 
 
 Multithreading

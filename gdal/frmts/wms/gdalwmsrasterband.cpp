@@ -83,7 +83,7 @@ GDALWMSRasterBand::~GDALWMSRasterBand() {
         m_overviews.pop_back();
 	}
 
-	omTianditu.clear(); 
+	omTianditu.clear();
 }
 
 void GDALWMSRasterBand::InitTiandituMap()
@@ -110,8 +110,8 @@ void GDALWMSRasterBand::InitTiandituMap()
 	fp = VSIFOpen( pszFilename, "rb" );
 	if( fp == nullptr )
 	{
-		CPLError( CE_Failure, CPLE_OpenFailed, 
-			"Failed to open %s, %s.", 
+		CPLError( CE_Failure, CPLE_OpenFailed,
+			"Failed to open %s, %s.",
 			pszFilename, VSIStrerror( errno ) );
 		return ;
 	}
@@ -133,7 +133,7 @@ void GDALWMSRasterBand::InitTiandituMap()
 		CPLString strValue = CPLFormFilename(pszDATA, papszRecord[1], nullptr);
 
 		omTianditu[strName] = strValue;
-		
+
 		CSLDestroy(papszRecord);
 		papszRecord = CSVReadParseLine( fp );
 	}
@@ -183,8 +183,8 @@ CPLErr GDALWMSRasterBand::ReadBlocks(int x, int y, void *buffer, int bx0, int by
                 // A missing tile is signaled by setting a range of "none"
                 if (EQUAL(request.Range, "none")) {
                     if (!advise_read) {
-                        if (ZeroBlock(ix, iy, nBand, p) != CE_None) {
-                            CPLError(CE_Failure, CPLE_AppDefined, "GDALWMS: ZeroBlock failed.");
+                        if (EmptyBlock(ix, iy, nBand, p) != CE_None) {
+                            CPLError(CE_Failure, CPLE_AppDefined, "GDALWMS: EmptyBlock failed.");
                             ret = CE_Failure;
                         }
                     }
@@ -213,8 +213,8 @@ CPLErr GDALWMSRasterBand::ReadBlocks(int x, int y, void *buffer, int bx0, int by
             if (need_this_block) {
                 if (offline) {
                     if (!advise_read) {
-                        if (ZeroBlock(ix, iy, nBand, p) != CE_None) {
-                            CPLError(CE_Failure, CPLE_AppDefined, "GDALWMS: ZeroBlock failed.");
+                        if (EmptyBlock(ix, iy, nBand, p) != CE_None) {
+                            CPLError(CE_Failure, CPLE_AppDefined, "GDALWMS: EmptyBlock failed.");
                             ret = CE_Failure;
                         }
                     }
@@ -274,9 +274,9 @@ CPLErr GDALWMSRasterBand::ReadBlocks(int x, int y, void *buffer, int bx0, int by
                         }
                     }
                     else if (wms_exception && m_parent_dataset->m_zeroblock_on_serverexceptions) {
-                        ret = ZeroBlock(request.x, request.y, nBand, p);
+                        ret = EmptyBlock(request.x, request.y, nBand, p);
                         if (ret != CE_None)
-                            CPLError(ret, CPLE_AppDefined, "GDALWMS: ZeroBlock failed.");
+                            CPLError(ret, CPLE_AppDefined, "GDALWMS: EmptyBlock failed.");
                     }
                     VSIUnlink(file_name);
                 }
@@ -298,9 +298,9 @@ CPLErr GDALWMSRasterBand::ReadBlocks(int x, int y, void *buffer, int bx0, int by
                         != m_parent_dataset->m_http_zeroblock_codes.end())
                     {
                         if (!advise_read) {
-                            ret = ZeroBlock(request.x, request.y, nBand, p);
+                            ret = EmptyBlock(request.x, request.y, nBand, p);
                             if (ret != CE_None)
-                                CPLError(ret, CPLE_AppDefined, "GDALWMS: ZeroBlock failed.");
+                                CPLError(ret, CPLE_AppDefined, "GDALWMS: EmptyBlock failed.");
                         }
                     } else {
                         ret = CE_Failure;
@@ -715,7 +715,7 @@ CPLErr GDALWMSRasterBand::ReadBlockFromDataset(GDALDataset *ds, int x,
                     {
 						GDALColorEntry ce0;
 						ct->GetColorEntryAsRGB(0, &ce0);
-						if(ce0.c1 == 255 && ce0.c2 == 255 && ce0.c3 == 255 && ce0.c4 == 0 )//如果ColorTable是:255 255 255 0变成 0 0 0
+						if(ce0.c1 == 255 && ce0.c2 == 255 && ce0.c3 == 255 && ce0.c4 == 0 )//���ColorTable��:255 255 255 0��� 0 0 0
 						{
 							ce0.c1 = ce0.c2 = ce0.c3 = 0;
 							ct->SetColorEntry(0, &ce0);
@@ -814,7 +814,7 @@ CPLErr GDALWMSRasterBand::ReadBlockFromDataset(GDALDataset *ds, int x,
 
                 if (p != nullptr)
                 {
-                    int pixel_space = GDALGetDataTypeSize(eDataType) / 8;
+                    int pixel_space = GDALGetDataTypeSizeBytes(eDataType);
                     int line_space = pixel_space * nBlockXSize;
                     if (color_table == nullptr)
                     {
@@ -949,18 +949,18 @@ CPLErr GDALWMSRasterBand::ReadBlockFromCache(const char* pszKey, int x, int y,
     return ReadBlockFromDataset(ds, x, y, to_buffer_band, buffer, advise_read);
 }
 
-CPLErr GDALWMSRasterBand::ZeroBlock(int x, int y, int to_buffer_band, void *buffer) {
+CPLErr GDALWMSRasterBand::EmptyBlock(int x, int y, int to_buffer_band, void *buffer) {
     CPLErr ret = CE_None;
 
     for (int ib = 1; ib <= m_parent_dataset->nBands; ++ib) {
         if (ret == CE_None) {
             void *p = nullptr;
             GDALRasterBlock *b = nullptr;
+            GDALWMSRasterBand* band = static_cast<GDALWMSRasterBand*>(m_parent_dataset->GetRasterBand(ib));
+            if (m_overview >= 0) band = static_cast<GDALWMSRasterBand*>(band->GetOverview(m_overview));
             if ((buffer != nullptr) && (ib == to_buffer_band)) {
                 p = buffer;
             } else {
-                GDALWMSRasterBand *band = static_cast<GDALWMSRasterBand *>(m_parent_dataset->GetRasterBand(ib));
-                if (m_overview >= 0) band = static_cast<GDALWMSRasterBand *>(band->GetOverview(m_overview));
                 if (!band->IsBlockInCache(x, y)) {
                     b = band->GetLockedBlockRef(x, y, true);
                     if (b != nullptr) {
@@ -973,9 +973,12 @@ CPLErr GDALWMSRasterBand::ZeroBlock(int x, int y, int to_buffer_band, void *buff
                 }
             }
             if (p != nullptr) {
-                unsigned char *paby = reinterpret_cast<unsigned char *>(p);
-                int block_size = nBlockXSize * nBlockYSize * (GDALGetDataTypeSize(eDataType) / 8);
-                for (int i = 0; i < block_size; ++i) paby[i] = 0;
+                int hasNDV;
+                double valNDV = band->GetNoDataValue(&hasNDV);
+                if (!hasNDV)
+                    valNDV = 0;
+                GDALCopyWords(&valNDV, GDT_Float64, 0, p, eDataType,
+                    GDALGetDataTypeSizeBytes(eDataType), nBlockXSize * nBlockYSize);
             }
             if (b != nullptr) {
                 b->DropLock();

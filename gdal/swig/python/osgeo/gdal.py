@@ -99,20 +99,21 @@ except __builtin__.Exception:
 
 
 have_warned = 0
-def deprecation_warn(module, sub_package=None):
-  global have_warned
+def deprecation_warn(module, sub_package=None, new_module=None):
+    global have_warned
 
-  if have_warned == 1:
-      return
+    if have_warned == 1:
+        return
 
-  have_warned = 1
-  if sub_package:
-      new_module = sub_package+'.'+module
-  else:
-      new_module = module
+    have_warned = 1
+    if sub_package is None or sub_package == 'utils':
+        sub_package = 'osgeo_utils'
+    if new_module is None:
+        new_module = module
+    new_module = '{}.{}'.format(sub_package, new_module)
 
-  from warnings import warn
-  warn('%s.py was placed in a namespace, it is now available as osgeo.%s' % (module, new_module),
+    from warnings import warn
+    warn('{}.py was placed in a namespace, it is now available as {}' .format(module, new_module),
        DeprecationWarning)
 
 
@@ -204,9 +205,6 @@ def VSIGetMemFileBuffer_unsafe(*args):
     return _gdal.VSIGetMemFileBuffer_unsafe(*args)
 
 
-def _is_str_or_unicode(o):
-    return isinstance(o, (str, type(u'')))
-
 def InfoOptions(options=None, format='text', deserialize=True,
          computeMinMax=False, reportHistograms=False, reportProj4=False,
          stats=False, approxStats=False, computeChecksum=False,
@@ -218,7 +216,7 @@ def InfoOptions(options=None, format='text', deserialize=True,
 
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
         format = 'text'
         if '-json' in new_options:
@@ -271,11 +269,11 @@ def Info(ds, **kwargs):
           options --- return of gdal.InfoOptions(), string or array of strings
           other keywords arguments of gdal.InfoOptions()
         If options is provided as a gdal.InfoOptions() object, other keywords are ignored. """
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, format, deserialize) = InfoOptions(**kwargs)
     else:
         (opts, format, deserialize) = kwargs['options']
-    if _is_str_or_unicode(ds):
+    if isinstance(ds, str):
         ds = Open(ds)
     ret = InfoInternal(ds, opts)
     if format == 'json' and deserialize:
@@ -290,7 +288,7 @@ def MultiDimInfoOptions(options=None, detailed=False, array=None, arrayoptions=N
 
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -314,12 +312,12 @@ def MultiDimInfo(ds, **kwargs):
           options --- return of gdal.MultiDimInfoOptions(), string or array of strings
           other keywords arguments of gdal.MultiDimInfoOptions()
         If options is provided as a gdal.MultiDimInfoOptions() object, other keywords are ignored. """
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         opts, as_text = MultiDimInfoOptions(**kwargs)
     else:
         opts = kwargs['options']
         as_text = True
-    if _is_str_or_unicode(ds):
+    if isinstance(ds, str):
         ds = OpenEx(ds, OF_VERBOSE_ERROR | OF_MULTIDIM_RASTER)
     ret = MultiDimInfoInternal(ds, opts)
     if not as_text:
@@ -329,7 +327,7 @@ def MultiDimInfo(ds, **kwargs):
 
 
 def _strHighPrec(x):
-    return x if _is_str_or_unicode(x) else '%.18g' % x
+    return x if isinstance(x, str) else '%.18g' % x
 
 def TranslateOptions(options=None, format=None,
               outputType = gdalconst.GDT_Unknown, bandList=None, maskBand=None,
@@ -378,7 +376,7 @@ def TranslateOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -455,6 +453,8 @@ def TranslateOptions(options=None, format=None,
                 new_options += ['-r', 'lanczos']
             elif resampleAlg == gdalconst.GRA_Average:
                 new_options += ['-r', 'average']
+            elif resampleAlg == gdalconst.GRA_RMS:
+                new_options += ['-r', 'rms']
             elif resampleAlg == gdalconst.GRA_Mode:
                 new_options += ['-r', 'mode']
             else:
@@ -474,11 +474,11 @@ def Translate(destName, srcDS, **kwargs):
           other keywords arguments of gdal.TranslateOptions()
         If options is provided as a gdal.TranslateOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = TranslateOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = Open(srcDS)
 
     return TranslateInternal(destName, srcDS, opts, callback, callback_data)
@@ -547,7 +547,7 @@ def WarpOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -595,6 +595,8 @@ def WarpOptions(options=None, format=None,
                 new_options += ['-r', 'lanczos']
             elif resampleAlg == gdalconst.GRIORA_Average:
                 new_options += ['-r', 'average']
+            elif resampleAlg == gdalconst.GRIORA_RMS:
+                new_options += ['-r', 'rms']
             elif resampleAlg == gdalconst.GRIORA_Mode:
                 new_options += ['-r', 'mode']
             elif resampleAlg == gdalconst.GRIORA_Gauss:
@@ -642,7 +644,7 @@ def WarpOptions(options=None, format=None,
         if setColorInterpretation:
             new_options += ['-setci']
 
-        if overviewLevel is None or _is_str_or_unicode(overviewLevel):
+        if overviewLevel is None or isinstance(overviewLevel, str):
             pass
         elif isinstance(overviewLevel, int):
             if overviewLevel < 0:
@@ -667,23 +669,23 @@ def Warp(destNameOrDestDS, srcDSOrSrcDSTab, **kwargs):
           other keywords arguments of gdal.WarpOptions()
         If options is provided as a gdal.WarpOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = WarpOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDSOrSrcDSTab):
+    if isinstance(srcDSOrSrcDSTab, str):
         srcDSTab = [Open(srcDSOrSrcDSTab)]
     elif isinstance(srcDSOrSrcDSTab, list):
         srcDSTab = []
         for elt in srcDSOrSrcDSTab:
-            if _is_str_or_unicode(elt):
+            if isinstance(elt, str):
                 srcDSTab.append(Open(elt))
             else:
                 srcDSTab.append(elt)
     else:
         srcDSTab = [srcDSOrSrcDSTab]
 
-    if _is_str_or_unicode(destNameOrDestDS):
+    if isinstance(destNameOrDestDS, str):
         return wrapper_GDALWarpDestName(destNameOrDestDS, srcDSTab, opts, callback, callback_data)
     else:
         return wrapper_GDALWarpDestDS(destNameOrDestDS, srcDSTab, opts, callback, callback_data)
@@ -696,6 +698,7 @@ def VectorTranslateOptions(options=None, format=None,
          SQLStatement=None, SQLDialect=None, where=None, selectFields=None,
          addFields=False,
          forceNullable=False,
+         emptyStrAsNull=False,
          spatFilter=None, spatSRS=None,
          datasetCreationOptions=None,
          layerCreationOptions=None,
@@ -706,6 +709,7 @@ def VectorTranslateOptions(options=None, format=None,
          segmentizeMaxDist= None,
          makeValid=False,
          zField=None,
+         resolveDomains=False,
          skipFailures=False,
          limit=None,
          callback=None, callback_data=None):
@@ -724,6 +728,7 @@ def VectorTranslateOptions(options=None, format=None,
           selectFields --- list of fields to select
           addFields --- whether to add new fields found in source layers (to be used with accessMode == 'append')
           forceNullable --- whether to drop NOT NULL constraints on newly created fields
+          emptyStrAsNull --- whether to treat empty string values as NULL
           spatFilter --- spatial filter as (minX, minY, maxX, maxY) bounding box
           spatSRS --- SRS in which the spatFilter is expressed. If not specified, it is assumed to be the one of the layer(s)
           datasetCreationOptions --- list of dataset creation options
@@ -735,6 +740,7 @@ def VectorTranslateOptions(options=None, format=None,
           segmentizeMaxDist --- maximum distance between consecutive nodes of a line geometry
           makeValid --- run MakeValid() on geometries
           zField --- name of field to use to set the Z component of geometries
+          resolveDomains --- whether to create an additional field for each field associated with a coded field domain.
           skipFailures --- whether to skip failures
           limit -- maximum number of features to read per layer
           callback --- callback method
@@ -742,7 +748,7 @@ def VectorTranslateOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -776,6 +782,8 @@ def VectorTranslateOptions(options=None, format=None,
             new_options += ['-addfields']
         if forceNullable:
             new_options += ['-forceNullable']
+        if emptyStrAsNull:
+            new_options += ['-emptyStrAsNull']
         if selectFields is not None:
             val = ''
             for item in selectFields:
@@ -790,7 +798,7 @@ def VectorTranslateOptions(options=None, format=None,
             for opt in layerCreationOptions:
                 new_options += ['-lco', opt]
         if layers is not None:
-            if _is_str_or_unicode(layers):
+            if isinstance(layers, str):
                 new_options += [layers]
             else:
                 for lyr in layers:
@@ -806,7 +814,7 @@ def VectorTranslateOptions(options=None, format=None,
         if layerName is not None:
             new_options += ['-nln', layerName]
         if geometryType is not None:
-            if _is_str_or_unicode(geometryType):
+            if isinstance(geometryType, str):
                 new_options += ['-nlt', geometryType]
             else:
                 for opt in geometryType:
@@ -815,6 +823,8 @@ def VectorTranslateOptions(options=None, format=None,
             new_options += ['-dim', dim]
         if zField is not None:
             new_options += ['-zfield', zField]
+        if resolveDomains:
+            new_options += ['-resolveDomains']
         if skipFailures:
             new_options += ['-skip']
         if limit is not None:
@@ -834,20 +844,20 @@ def VectorTranslate(destNameOrDestDS, srcDS, **kwargs):
           other keywords arguments of gdal.VectorTranslateOptions()
         If options is provided as a gdal.VectorTranslateOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = VectorTranslateOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = OpenEx(srcDS, gdalconst.OF_VECTOR)
 
-    if _is_str_or_unicode(destNameOrDestDS):
+    if isinstance(destNameOrDestDS, str):
         return wrapper_GDALVectorTranslateDestName(destNameOrDestDS, srcDS, opts, callback, callback_data)
     else:
         return wrapper_GDALVectorTranslateDestDS(destNameOrDestDS, srcDS, opts, callback, callback_data)
 
 def DEMProcessingOptions(options=None, colorFilename=None, format=None,
-              creationOptions=None, computeEdges=False, alg='Horn', band=1,
+              creationOptions=None, computeEdges=False, alg=None, band=1,
               zFactor=None, scale=None, azimuth=None, altitude=None,
               combined=False, multiDirectional=False, igor=False,
               slopeFormat=None, trigonometric=False, zeroForFlat=False,
@@ -860,7 +870,7 @@ def DEMProcessingOptions(options=None, colorFilename=None, format=None,
           format --- output format ("GTiff", etc...)
           creationOptions --- list of creation options
           computeEdges --- whether to compute values at raster edges.
-          alg --- 'ZevenbergenThorne' or 'Horn'
+          alg --- 'Horn' (default) or 'ZevenbergenThorne' for hillshade, slope or aspect. 'Wilson' (default) or 'Riley' for TRI
           band --- source band number to use
           zFactor --- (hillshade only) vertical exaggeration used to pre-multiply the elevations.
           scale --- ratio of vertical units to horizontal.
@@ -879,7 +889,7 @@ def DEMProcessingOptions(options=None, colorFilename=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -890,8 +900,8 @@ def DEMProcessingOptions(options=None, colorFilename=None, format=None,
                 new_options += ['-co', opt]
         if computeEdges:
             new_options += ['-compute_edges']
-        if alg == 'ZevenbergenThorne':
-            new_options += ['-alg', 'ZevenbergenThorne']
+        if alg:
+            new_options += ['-alg', alg]
         new_options += ['-b', str(band)]
         if zFactor is not None:
             new_options += ['-z', str(zFactor)]
@@ -938,11 +948,11 @@ def DEMProcessing(destName, srcDS, processing, **kwargs):
           other keywords arguments of gdal.DEMProcessingOptions()
         If options is provided as a gdal.DEMProcessingOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, colorFilename, callback, callback_data) = DEMProcessingOptions(**kwargs)
     else:
         (opts, colorFilename, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = Open(srcDS)
 
     return DEMProcessingInternal(destName, srcDS, processing, colorFilename, opts, callback, callback_data)
@@ -968,7 +978,7 @@ def NearblackOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -1008,14 +1018,14 @@ def Nearblack(destNameOrDestDS, srcDS, **kwargs):
           other keywords arguments of gdal.NearblackOptions()
         If options is provided as a gdal.NearblackOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = NearblackOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = OpenEx(srcDS)
 
-    if _is_str_or_unicode(destNameOrDestDS):
+    if isinstance(destNameOrDestDS, str):
         return wrapper_GDALNearblackDestName(destNameOrDestDS, srcDS, opts, callback, callback_data)
     else:
         return wrapper_GDALNearblackDestDS(destNameOrDestDS, srcDS, opts, callback, callback_data)
@@ -1061,7 +1071,7 @@ def GridOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -1111,11 +1121,11 @@ def Grid(destName, srcDS, **kwargs):
           other keywords arguments of gdal.GridOptions()
         If options is provided as a gdal.GridOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = GridOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = OpenEx(srcDS, gdalconst.OF_VECTOR)
 
     return GridInternal(destName, srcDS, opts, callback, callback_data)
@@ -1164,7 +1174,7 @@ def RasterizeOptions(options=None, format=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -1244,14 +1254,14 @@ def Rasterize(destNameOrDestDS, srcDS, **kwargs):
           other keywords arguments of gdal.RasterizeOptions()
         If options is provided as a gdal.RasterizeOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = RasterizeOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDS):
+    if isinstance(srcDS, str):
         srcDS = OpenEx(srcDS, gdalconst.OF_VECTOR)
 
-    if _is_str_or_unicode(destNameOrDestDS):
+    if isinstance(destNameOrDestDS, str):
         return wrapper_GDALRasterizeDestName(destNameOrDestDS, srcDS, opts, callback, callback_data)
     else:
         return wrapper_GDALRasterizeDestDS(destNameOrDestDS, srcDS, opts, callback, callback_data)
@@ -1293,7 +1303,7 @@ def BuildVRTOptions(options=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -1325,6 +1335,8 @@ def BuildVRTOptions(options=None,
                 new_options += ['-r', 'lanczos']
             elif resampleAlg == gdalconst.GRIORA_Average:
                 new_options += ['-r', 'average']
+            elif resampleAlg == gdalconst.GRIORA_RMS:
+                new_options += ['-r', 'rms']
             elif resampleAlg == gdalconst.GRIORA_Mode:
                 new_options += ['-r', 'mode']
             elif resampleAlg == gdalconst.GRIORA_Gauss:
@@ -1354,18 +1366,18 @@ def BuildVRT(destName, srcDSOrSrcDSTab, **kwargs):
           other keywords arguments of gdal.BuildVRTOptions()
         If options is provided as a gdal.BuildVRTOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = BuildVRTOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
 
     srcDSTab = []
     srcDSNamesTab = []
-    if _is_str_or_unicode(srcDSOrSrcDSTab):
+    if isinstance(srcDSOrSrcDSTab, str):
         srcDSNamesTab = [srcDSOrSrcDSTab]
     elif isinstance(srcDSOrSrcDSTab, list):
         for elt in srcDSOrSrcDSTab:
-            if _is_str_or_unicode(elt):
+            if isinstance(elt, str):
                 srcDSNamesTab.append(elt)
             else:
                 srcDSTab.append(elt)
@@ -1397,7 +1409,7 @@ def MultiDimTranslateOptions(options=None, format=None, creationOptions=None,
     """
     options = [] if options is None else options
 
-    if _is_str_or_unicode(options):
+    if isinstance(options, str):
         new_options = ParseCommandLine(options)
     else:
         new_options = options
@@ -1431,16 +1443,16 @@ def MultiDimTranslate(destName, srcDSOrSrcDSTab, **kwargs):
           other keywords arguments of gdal.MultiDimTranslateOptions()
         If options is provided as a gdal.MultiDimTranslateOptions() object, other keywords are ignored. """
 
-    if 'options' not in kwargs or isinstance(kwargs['options'], list) or _is_str_or_unicode(kwargs['options']):
+    if 'options' not in kwargs or isinstance(kwargs['options'], (list, str)):
         (opts, callback, callback_data) = MultiDimTranslateOptions(**kwargs)
     else:
         (opts, callback, callback_data) = kwargs['options']
-    if _is_str_or_unicode(srcDSOrSrcDSTab):
+    if isinstance(srcDSOrSrcDSTab, str):
         srcDSTab = [OpenEx(srcDSOrSrcDSTab, OF_VERBOSE_ERROR | OF_RASTER | OF_MULTIDIM_RASTER)]
     elif isinstance(srcDSOrSrcDSTab, list):
         srcDSTab = []
         for elt in srcDSOrSrcDSTab:
-            if _is_str_or_unicode(elt):
+            if isinstance(elt, str):
                 srcDSTab.append(OpenEx(elt, OF_VERBOSE_ERROR | OF_RASTER | OF_MULTIDIM_RASTER))
             else:
                 srcDSTab.append(elt)
@@ -1786,7 +1798,7 @@ def VSIFOpenL(*args):
     return _gdal.VSIFOpenL(*args)
 
 def VSIFOpenExL(*args):
-    """VSIFOpenExL(char const * utf8_path, char const * pszMode, int bSetError) -> VSILFILE"""
+    """VSIFOpenExL(char const * utf8_path, char const * pszMode, int bSetError=False, char ** options=None) -> VSILFILE"""
     return _gdal.VSIFOpenExL(*args)
 
 def VSIFEofL(*args):
@@ -1977,8 +1989,18 @@ class Driver(MajorObject):
 Driver_swigregister = _gdal.Driver_swigregister
 Driver_swigregister(Driver)
 
-from . import ogr
-from . import osr
+from sys import version_info as _swig_python_version_info
+if _swig_python_version_info >= (2, 7, 0):
+    from . import ogr
+else:
+    import ogr
+del _swig_python_version_info
+from sys import version_info as _swig_python_version_info
+if _swig_python_version_info >= (2, 7, 0):
+    from . import osr
+else:
+    import osr
+del _swig_python_version_info
 class ColorEntry(_object):
     """Proxy of C++ GDALColorEntry class."""
 
@@ -2266,7 +2288,7 @@ class Dataset(MajorObject):
 
 
     def SetSpatialRef(self, *args):
-        """SetSpatialRef(Dataset self, SpatialReference srs)"""
+        """SetSpatialRef(Dataset self, SpatialReference srs) -> CPLErr"""
         return _gdal.Dataset_SetSpatialRef(self, *args)
 
 
@@ -2455,8 +2477,18 @@ class Dataset(MajorObject):
         return _gdal.Dataset_ClearStatistics(self, *args)
 
 
+    def GetFieldDomain(self, *args):
+        """GetFieldDomain(Dataset self, char const * name) -> FieldDomain"""
+        return _gdal.Dataset_GetFieldDomain(self, *args)
+
+
+    def AddFieldDomain(self, *args):
+        """AddFieldDomain(Dataset self, FieldDomain fieldDomain) -> bool"""
+        return _gdal.Dataset_AddFieldDomain(self, *args)
+
+
     def ReadRaster1(self, *args, **kwargs):
-        """ReadRaster1(Dataset self, double xoff, double yoff, double xsize, double ysize, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, int band_list=0, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GIntBig * buf_band_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None) -> CPLErr"""
+        """ReadRaster1(Dataset self, double xoff, double yoff, double xsize, double ysize, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, int band_list=0, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GIntBig * buf_band_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None, void * inputOutputBuf=None) -> CPLErr"""
         return _gdal.Dataset_ReadRaster1(self, *args, **kwargs)
 
 
@@ -2466,17 +2498,34 @@ class Dataset(MajorObject):
                     resample_alg=gdalconst.GRIORA_NearestNeighbour,
                     callback=None,
                     callback_data=None,
-                    interleave='band'):
+                    interleave='band',
+                    band_list=None):
         """ Reading a chunk of a GDAL band into a numpy array. The optional (buf_xsize,buf_ysize,buf_type)
         parameters should generally not be specified if buf_obj is specified. The array is returned"""
 
-        from osgeo import gdalnumeric
-        return gdalnumeric.DatasetReadAsArray(self, xoff, yoff, xsize, ysize, buf_obj,
+        from osgeo import gdal_array
+        return gdal_array.DatasetReadAsArray(self, xoff, yoff, xsize, ysize, buf_obj,
                                               buf_xsize, buf_ysize, buf_type,
                                               resample_alg=resample_alg,
                                               callback=callback,
                                               callback_data=callback_data,
-                                              interleave=interleave )
+                                              interleave=interleave,
+                                              band_list=band_list)
+
+    def WriteArray(self, array, xoff=0, yoff=0,
+                   band_list=None,
+                   interleave='band',
+                   resample_alg=gdalconst.GRIORA_NearestNeighbour,
+                   callback=None,
+                   callback_data=None):
+        from osgeo import gdal_array
+
+        return gdal_array.DatasetWriteArray(self, array, xoff, yoff,
+                                            band_list=band_list,
+                                            interleave=interleave,
+                                            resample_alg=resample_alg,
+                                            callback=callback,
+                                            callback_data=callback_data)
 
     def WriteRaster(self, xoff, yoff, xsize, ysize,
                     buf_string,
@@ -2489,7 +2538,15 @@ class Dataset(MajorObject):
         if buf_ysize is None:
             buf_ysize = ysize
         if band_list is None:
-            band_list = range(1,self.RasterCount+1)
+            band_list = list(range(1, self.RasterCount + 1))
+
+    # Redirect to numpy-friendly WriteArray() if buf_string is a numpy array
+    # and other arguments are compatible
+        if type(buf_string).__name__ == 'ndarray' and \
+           buf_xsize == xsize and buf_ysize == ysize and buf_type is None and \
+           buf_pixel_space is None and buf_line_space is None and buf_band_space is None:
+            return self.WriteArray(buf_string, xoff=xoff, yoff=yoff,
+                                   band_list=band_list)
         if buf_type is None:
             buf_type = self.GetRasterBand(1).DataType
 
@@ -2504,14 +2561,15 @@ class Dataset(MajorObject):
                    buf_pixel_space=None, buf_line_space=None, buf_band_space=None,
                    resample_alg=gdalconst.GRIORA_NearestNeighbour,
                    callback=None,
-                   callback_data=None):
+                   callback_data=None,
+                   buf_obj=None):
 
         if xsize is None:
             xsize = self.RasterXSize
         if ysize is None:
             ysize = self.RasterYSize
         if band_list is None:
-            band_list = range(1,self.RasterCount+1)
+            band_list = list(range(1, self.RasterCount + 1))
         if buf_xsize is None:
             buf_xsize = xsize
         if buf_ysize is None:
@@ -2523,7 +2581,7 @@ class Dataset(MajorObject):
         return _gdal.Dataset_ReadRaster1(self, xoff, yoff, xsize, ysize,
                                             buf_xsize, buf_ysize, buf_type,
                                             band_list, buf_pixel_space, buf_line_space, buf_band_space,
-                                          resample_alg, callback, callback_data )
+                                          resample_alg, callback, callback_data, buf_obj )
 
     def GetVirtualMemArray(self, eAccess=gdalconst.GF_Read, xoff=0, yoff=0,
                            xsize=None, ysize=None, bufxsize=None, bufysize=None,
@@ -2539,7 +2597,7 @@ class Dataset(MajorObject):
            Any reference to the array must be dropped before the last reference to the
            related dataset is also dropped.
         """
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
         if xsize is None:
             xsize = self.RasterXSize
         if ysize is None:
@@ -2551,12 +2609,12 @@ class Dataset(MajorObject):
         if datatype is None:
             datatype = self.GetRasterBand(1).DataType
         if band_list is None:
-            band_list = range(1,self.RasterCount+1)
+            band_list = list(range(1, self.RasterCount + 1))
         if options is None:
             virtualmem = self.GetVirtualMem(eAccess, xoff, yoff, xsize, ysize, bufxsize, bufysize, datatype, band_list, band_sequential, cache_size, page_size_hint)
         else:
             virtualmem = self.GetVirtualMem(eAccess, xoff, yoff, xsize, ysize, bufxsize, bufysize, datatype, band_list, band_sequential, cache_size, page_size_hint,  options)
-        return gdalnumeric.VirtualMemGetArray( virtualmem )
+        return gdal_array.VirtualMemGetArray( virtualmem )
 
     def GetTiledVirtualMemArray(self, eAccess=gdalconst.GF_Read, xoff=0, yoff=0,
                            xsize=None, ysize=None, tilexsize=256, tileysize=256,
@@ -2574,7 +2632,7 @@ class Dataset(MajorObject):
            Any reference to the array must be dropped before the last reference to the
            related dataset is also dropped.
         """
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
         if xsize is None:
             xsize = self.RasterXSize
         if ysize is None:
@@ -2582,12 +2640,12 @@ class Dataset(MajorObject):
         if datatype is None:
             datatype = self.GetRasterBand(1).DataType
         if band_list is None:
-            band_list = range(1,self.RasterCount+1)
+            band_list = list(range(1, self.RasterCount + 1))
         if options is None:
             virtualmem = self.GetTiledVirtualMem(eAccess,xoff,yoff,xsize,ysize,tilexsize,tileysize,datatype,band_list,tile_organization,cache_size)
         else:
             virtualmem = self.GetTiledVirtualMem(eAccess,xoff,yoff,xsize,ysize,tilexsize,tileysize,datatype,band_list,tile_organization,cache_size, options)
-        return gdalnumeric.VirtualMemGetArray( virtualmem )
+        return gdal_array.VirtualMemGetArray( virtualmem )
 
     def GetSubDatasets(self):
         sd_list = []
@@ -2605,7 +2663,7 @@ class Dataset(MajorObject):
 
     def BeginAsyncReader(self, xoff, yoff, xsize, ysize, buf_obj=None, buf_xsize=None, buf_ysize=None, buf_type=None, band_list=None, options=None):
         if band_list is None:
-            band_list = range(1, self.RasterCount + 1)
+            band_list = list(range(1, self.RasterCount + 1))
         if buf_xsize is None:
             buf_xsize = 0;
         if buf_ysize is None:
@@ -2922,19 +2980,29 @@ class MDArray(_object):
         return _gdal.MDArray_GetOffset(self, *args)
 
 
+    def GetOffsetStorageType(self, *args):
+        """GetOffsetStorageType(MDArray self) -> GDALDataType"""
+        return _gdal.MDArray_GetOffsetStorageType(self, *args)
+
+
     def GetScale(self, *args):
         """GetScale(MDArray self)"""
         return _gdal.MDArray_GetScale(self, *args)
 
 
-    def SetOffset(self, *args):
-        """SetOffset(MDArray self, double val) -> CPLErr"""
-        return _gdal.MDArray_SetOffset(self, *args)
+    def GetScaleStorageType(self, *args):
+        """GetScaleStorageType(MDArray self) -> GDALDataType"""
+        return _gdal.MDArray_GetScaleStorageType(self, *args)
 
 
-    def SetScale(self, *args):
-        """SetScale(MDArray self, double val) -> CPLErr"""
-        return _gdal.MDArray_SetScale(self, *args)
+    def SetOffset(self, *args, **kwargs):
+        """SetOffset(MDArray self, double val, GDALDataType storageType) -> CPLErr"""
+        return _gdal.MDArray_SetOffset(self, *args, **kwargs)
+
+
+    def SetScale(self, *args, **kwargs):
+        """SetScale(MDArray self, double val, GDALDataType storageType) -> CPLErr"""
+        return _gdal.MDArray_SetScale(self, *args, **kwargs)
 
 
     def SetUnit(self, *args):
@@ -3024,8 +3092,8 @@ class MDArray(_object):
                     buffer_datatype = None,
                     buf_obj = None):
 
-        from osgeo import gdalnumeric
-        return gdalnumeric.MDArrayReadAsArray(self, array_start_idx, count, array_step, buffer_datatype, buf_obj)
+        from osgeo import gdal_array
+        return gdal_array.MDArrayReadAsArray(self, array_start_idx, count, array_step, buffer_datatype, buf_obj)
 
     def AdviseRead(self, array_start_idx = None, count = None):
         if not array_start_idx:
@@ -3071,13 +3139,58 @@ class MDArray(_object):
              buffer_stride = None,
              buffer_datatype = None):
 
+        dimCount = self.GetDimensionCount()
+
+    # Redirect to numpy-friendly WriteArray() if buffer is a numpy array
+    # and other arguments are compatible
+        if type(buffer).__name__ == 'ndarray' and \
+           count is None and buffer_stride is None and buffer_datatype is None:
+            return self.WriteArray(buffer, array_start_idx=array_start_idx, array_step=array_step)
+
+    # Special case for buffer of type array and 1D arrays
+        if dimCount == 1 and type(buffer).__name__ == 'array' and \
+           count is None and buffer_stride is None and buffer_datatype is None:
+            map_typecode_itemsize_to_gdal = {
+               ('B',1): GDT_Byte,
+               ('h',2): GDT_Int16,
+               ('H',2): GDT_UInt16,
+               ('i',4): GDT_Int32,
+               ('I',4): GDT_UInt32,
+               ('l',4): GDT_Int32,
+    # ('l',8): GDT_Int64,
+    # ('q',8): GDT_Int64,
+    # ('Q',8): GDT_UInt64,
+               ('f', 4): GDT_Float32,
+               ('d', 8): GDT_Float64
+            }
+            key = (buffer.typecode, buffer.itemsize)
+            if key not in map_typecode_itemsize_to_gdal:
+                raise Exception("unhandled type for buffer of type array")
+            buffer_datatype = ExtendedDataType.Create(map_typecode_itemsize_to_gdal[key])
+
+    # Special case for a list of numeric values and 1D arrays
+        elif dimCount == 1 and type(buffer) == type([]) and len(buffer) != 0 \
+             and self.GetDataType().GetClass() != GEDTC_STRING:
+            buffer_datatype = GDT_Int32
+            for v in buffer:
+                if isinstance(v, int):
+                    if v >= (1 << 31) or v < -(1 << 31):
+                        buffer_datatype = GDT_Float64
+                elif isinstance(v, float):
+                    buffer_datatype = GDT_Float64
+                else:
+                    raise ValueError('Only lists with integer or float elements are supported')
+            import array
+            buffer = array.array('d' if buffer_datatype == GDT_Float64 else 'i', buffer)
+            buffer_datatype = ExtendedDataType.Create(buffer_datatype)
+
         if not buffer_datatype:
           buffer_datatype = self.GetDataType()
 
-        is_1d_string = self.GetDataType().GetClass() == GEDTC_STRING and buffer_datatype.GetClass() == GEDTC_STRING and self.GetDimensionCount() == 1
+        is_1d_string = self.GetDataType().GetClass() == GEDTC_STRING and buffer_datatype.GetClass() == GEDTC_STRING and dimCount == 1
 
         if not array_start_idx:
-          array_start_idx = [0] * self.GetDimensionCount()
+          array_start_idx = [0] * dimCount
 
         if not count:
           if is_1d_string:
@@ -3087,7 +3200,7 @@ class MDArray(_object):
               count = [ dim.GetSize() for dim in self.GetDimensions() ]
 
         if not array_step:
-          array_step = [1] * self.GetDimensionCount()
+          array_step = [1] * dimCount
 
         if not buffer_stride:
           stride = 1
@@ -3108,8 +3221,8 @@ class MDArray(_object):
                     array_start_idx = None,
                     array_step = None):
 
-        from osgeo import gdalnumeric
-        return gdalnumeric.MDArrayWriteArray(self, array, array_start_idx, array_step)
+        from osgeo import gdal_array
+        return gdal_array.MDArrayWriteArray(self, array, array_start_idx, array_step)
 
     def ReadAsMaskedArray(self,
                     array_start_idx = None,
@@ -3121,7 +3234,7 @@ class MDArray(_object):
         if mask is not None:
             array = self.ReadAsArray(array_start_idx, count, array_step)
             mask_array = mask.ReadAsArray(array_start_idx, count, array_step)
-            bool_array = ~mask_array.astype(numpy.bool)
+            bool_array = ~mask_array.astype(bool)
             return numpy.ma.array(array, mask=bool_array)
         else:
             return numpy.ma.array(self.ReadAsArray(array_start_idx, count, array_step), mask=None)
@@ -3279,7 +3392,7 @@ class Attribute(_object):
               return self.WriteDouble(val)
       if isinstance(val, float):
         return self.WriteDouble(val)
-      if isinstance(val, (str, type(u''))) and self.GetDataType().GetClass() != GEDTC_COMPOUND:
+      if isinstance(val, str) and self.GetDataType().GetClass() != GEDTC_COMPOUND:
         return self.WriteString(val)
       if isinstance(val, list):
         if len(val) == 0:
@@ -3289,7 +3402,7 @@ class Attribute(_object):
               return self.WriteDoubleArray(val)
         if isinstance(val[0], (int, type(12345678901234), float)):
           return self.WriteDoubleArray(val)
-        if isinstance(val[0], (str, type(u''))):
+        if isinstance(val[0], str):
           return self.WriteStringArray(val)
       return self.WriteRaw(val)
 
@@ -3662,7 +3775,7 @@ class Band(MajorObject):
 
 
     def WriteRaster(self, *args, **kwargs):
-        """WriteRaster(Band self, int xoff, int yoff, int xsize, int ysize, GIntBig buf_len, int * buf_xsize=None, int * buf_ysize=None, int * buf_type=None, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None) -> CPLErr"""
+        """WriteRaster(Band self, int xoff, int yoff, int xsize, int ysize, GIntBig buf_len, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None) -> CPLErr"""
         return _gdal.Band_WriteRaster(self, *args, **kwargs)
 
 
@@ -3777,12 +3890,12 @@ class Band(MajorObject):
 
 
     def ReadRaster1(self, *args, **kwargs):
-        """ReadRaster1(Band self, double xoff, double yoff, double xsize, double ysize, int * buf_xsize=None, int * buf_ysize=None, int * buf_type=None, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None) -> CPLErr"""
+        """ReadRaster1(Band self, double xoff, double yoff, double xsize, double ysize, int * buf_xsize=None, int * buf_ysize=None, GDALDataType * buf_type=None, GIntBig * buf_pixel_space=None, GIntBig * buf_line_space=None, GDALRIOResampleAlg resample_alg, GDALProgressFunc callback=0, void * callback_data=None, void * inputOutputBuf=None) -> CPLErr"""
         return _gdal.Band_ReadRaster1(self, *args, **kwargs)
 
 
     def ReadBlock(self, *args, **kwargs):
-        """ReadBlock(Band self, int xoff, int yoff) -> CPLErr"""
+        """ReadBlock(Band self, int xoff, int yoff, void * buf_obj=None) -> CPLErr"""
         return _gdal.Band_ReadBlock(self, *args, **kwargs)
 
 
@@ -3809,7 +3922,8 @@ class Band(MajorObject):
                    buf_pixel_space=None, buf_line_space=None,
                    resample_alg=gdalconst.GRIORA_NearestNeighbour,
                    callback=None,
-                   callback_data=None):
+                   callback_data=None,
+                   buf_obj=None):
 
         if xsize is None:
             xsize = self.XSize
@@ -3819,7 +3933,33 @@ class Band(MajorObject):
         return _gdal.Band_ReadRaster1(self, xoff, yoff, xsize, ysize,
                                       buf_xsize, buf_ysize, buf_type,
                                       buf_pixel_space, buf_line_space,
-                                      resample_alg, callback, callback_data)
+                                      resample_alg, callback, callback_data,
+                                      buf_obj)
+
+    def WriteRaster(self, xoff, yoff, xsize, ysize,
+                    buf_string,
+                    buf_xsize=None, buf_ysize=None, buf_type=None,
+                    buf_pixel_space=None, buf_line_space=None ):
+
+        if buf_xsize is None:
+            buf_xsize = xsize
+        if buf_ysize is None:
+            buf_ysize = ysize
+
+    # Redirect to numpy-friendly WriteArray() if buf_string is a numpy array
+    # and other arguments are compatible
+        if type(buf_string).__name__ == 'ndarray' and \
+           buf_xsize == xsize and buf_ysize == ysize and buf_type is None and \
+           buf_pixel_space is None and buf_line_space is None:
+            return self.WriteArray(buf_string, xoff=xoff, yoff=yoff)
+
+        if buf_type is None:
+            buf_type = self.DataType
+
+        return _gdal.Band_WriteRaster(self,
+                 xoff, yoff, xsize, ysize,
+                buf_string, buf_xsize, buf_ysize, buf_type,
+                buf_pixel_space, buf_line_space )
 
     def ReadAsArray(self, xoff=0, yoff=0, win_xsize=None, win_ysize=None,
                     buf_xsize=None, buf_ysize=None, buf_type=None, buf_obj=None,
@@ -3829,9 +3969,9 @@ class Band(MajorObject):
         """ Reading a chunk of a GDAL band into a numpy array. The optional (buf_xsize,buf_ysize,buf_type)
         parameters should generally not be specified if buf_obj is specified. The array is returned"""
 
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
 
-        return gdalnumeric.BandReadAsArray(self, xoff, yoff,
+        return gdal_array.BandReadAsArray(self, xoff, yoff,
                                            win_xsize, win_ysize,
                                            buf_xsize, buf_ysize, buf_type, buf_obj,
                                            resample_alg=resample_alg,
@@ -3842,9 +3982,9 @@ class Band(MajorObject):
                    resample_alg=gdalconst.GRIORA_NearestNeighbour,
                    callback=None,
                    callback_data=None):
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
 
-        return gdalnumeric.BandWriteArray(self, array, xoff, yoff,
+        return gdal_array.BandWriteArray(self, array, xoff, yoff,
                                           resample_alg=resample_alg,
                                           callback=callback,
                                           callback_data=callback_data)
@@ -3859,7 +3999,7 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          from osgeo import gdalnumeric
+          from osgeo import gdal_array
           if xsize is None:
               xsize = self.XSize
           if ysize is None:
@@ -3874,7 +4014,7 @@ class Band(MajorObject):
               virtualmem = self.GetVirtualMem(eAccess, xoff, yoff, xsize, ysize, bufxsize, bufysize, datatype, cache_size, page_size_hint)
           else:
               virtualmem = self.GetVirtualMem(eAccess, xoff, yoff, xsize, ysize, bufxsize, bufysize, datatype, cache_size, page_size_hint, options)
-          return gdalnumeric.VirtualMemGetArray(virtualmem)
+          return gdal_array.VirtualMemGetArray(virtualmem)
 
     def GetVirtualMemAutoArray(self, eAccess=gdalconst.GF_Read, options=None):
           """Return a NumPy array for the band, seen as a virtual memory mapping.
@@ -3882,12 +4022,12 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          from osgeo import gdalnumeric
+          from osgeo import gdal_array
           if options is None:
               virtualmem = self.GetVirtualMemAuto(eAccess)
           else:
               virtualmem = self.GetVirtualMemAuto(eAccess,options)
-          return gdalnumeric.VirtualMemGetArray( virtualmem )
+          return gdal_array.VirtualMemGetArray( virtualmem )
 
     def GetTiledVirtualMemArray(self, eAccess=gdalconst.GF_Read, xoff=0, yoff=0,
                              xsize=None, ysize=None, tilexsize=256, tileysize=256,
@@ -3899,7 +4039,7 @@ class Band(MajorObject):
              Any reference to the array must be dropped before the last reference to the
              related dataset is also dropped.
           """
-          from osgeo import gdalnumeric
+          from osgeo import gdal_array
           if xsize is None:
               xsize = self.XSize
           if ysize is None:
@@ -3910,7 +4050,7 @@ class Band(MajorObject):
               virtualmem = self.GetTiledVirtualMem(eAccess,xoff,yoff,xsize,ysize,tilexsize,tileysize,datatype,cache_size)
           else:
               virtualmem = self.GetTiledVirtualMem(eAccess,xoff,yoff,xsize,ysize,tilexsize,tileysize,datatype,cache_size,options)
-          return gdalnumeric.VirtualMemGetArray( virtualmem )
+          return gdal_array.VirtualMemGetArray( virtualmem )
 
 Band_swigregister = _gdal.Band_swigregister
 Band_swigregister(Band)
@@ -4101,14 +4241,14 @@ class RasterAttributeTable(_object):
 
 
     def WriteArray(self, array, field, start=0):
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
 
-        return gdalnumeric.RATWriteArray(self, array, field, start)
+        return gdal_array.RATWriteArray(self, array, field, start)
 
     def ReadAsArray(self, field, start=0, length=None):
-        from osgeo import gdalnumeric
+        from osgeo import gdal_array
 
-        return gdalnumeric.RATReadArray(self, field, start, length)
+        return gdal_array.RATReadArray(self, field, start, length)
 
 RasterAttributeTable_swigregister = _gdal.RasterAttributeTable_swigregister
 RasterAttributeTable_swigregister(RasterAttributeTable)

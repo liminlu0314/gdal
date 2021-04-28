@@ -32,7 +32,7 @@ other content before the ``<GDAL_WMS>`` element.
 <GDAL_WMS>
 <Service name="WMS">                                                       Define what mini-driver to use, currently supported are: WMS, WorldWind, TileService, TMS, TiledWMS, VirtualEarth or AGS. (required)
 <Version>1.1.1</Version>                                                   WMS version. (optional, defaults to 1.1.1)
-<ServerUrl>http://onearth.jpl.nasa.gov/wms.cgi?</ServerUrl>                WMS server URL. (required)
+<ServerUrl>http://host.domain.com/wms.cgi?</ServerUrl>                     WMS server URL. (required)
 <SRS>EPSG:4326</SRS>                                                       Image projection (optional, defaults to EPSG:4326 in WMS and 102100 in AGS, WMS version 1.1.1 or below only and ArcGIS Server). For ArcGIS Server the spatial reference can be specified as either a well-known ID or as a `spatial reference json object <http://resources.arcgis.com/en/help/rest/apiref/geometry.html#sr>`__
 <CRS>CRS:83</CRS>                                                          Image projection (optional, defaults to EPSG:4326, WMS version 1.3.0 or above only)
 <ImageFormat>image/jpeg</ImageFormat>                                      Format in which to request data. Paletted formats like image/gif will be converted to RGB. (optional, defaults to image/jpeg)
@@ -82,6 +82,7 @@ other content before the ``<GDAL_WMS>`` element.
 <VerifyAdviseRead>true</VerifyAdviseRead>                                  Open each downloaded image and do some basic checks before writing into cache. Disabling can save some CPU cycles if server is trusted to always return correct images. (optional, defaults to true)
 <ClampRequests>false</ClampRequests>                                       Should requests, that otherwise would be partially outside of defined data window, be clipped resulting in smaller than block size request. (optional, defaults to true)
 <UserAgent>GDAL WMS driver (http://www.gdal.org/frmt_wms.html)</UserAgent> HTTP User-agent string. Some servers might require a well-known user-agent such as "Mozilla/5.0" (optional, defaults to "GDAL WMS driver (http://www.gdal.org/frmt_wms.html)"). When used with some servers, like OpenStreetMap ones, it is highly recommended to put a custom user agent to avoid being blocked if the default user agent had to be blocked.
+<Accept>mimetype>/Accept>                                                  HTTP Accept header to specify the MIME type of the expected output of the server. Empty by default
 <UserPwd>user:password</UserPwd>                                           User and Password for HTTP authentication (optional).
 <UnsafeSSL>true</UnsafeSSL>                                                Skip SSL certificate verification. May be needed if server is using a self signed certificate (optional, defaults to false).
 <Referer>http://example.foo/</Referer>                                     HTTP Referer string. Some servers might require it (optional).
@@ -224,7 +225,10 @@ OnEarth Tiled WMS
 
 The OnEarth Tiled WMS minidriver supports the Tiled WMS specification
 implemented for the JPL OnEarth driver per the specification at
-http://onearth.jpl.nasa.gov/tiled.html.
+http://web.archive.org/web/20130511182803/http://onearth.jpl.nasa.gov/tiled.html.
+
+Only the ServerUrl and the TiledGroupName are required, most of the required information 
+is automatically fetched from the remote server using the GetTileService method at open time.
 
 A typical OnEarth Tiled WMS configuration file might look like:
 
@@ -232,13 +236,24 @@ A typical OnEarth Tiled WMS configuration file might look like:
 
    <GDAL_WMS>
        <Service name="TiledWMS">
-       <ServerUrl>http://onmoon.jpl.nasa.gov/wms.cgi?</ServerUrl>
-       <TiledGroupName>Clementine</TiledGroupName>
+       <ServerUrl>https://gibs.earthdata.nasa.gov/twms/epsg4326/best/twms.cgi?</ServerUrl>
+       <TiledGroupName>MODIS Terra CorrectedReflectance TrueColor tileset</TiledGroupName>
+       <Change key="${time}">2020-02-02</Change>
        </Service>
    </GDAL_WMS>
 
-Most of the other information is automatically fetched from the remote
-server using the GetTileService method at open time.
+The TiledWMS minidriver can use the following open options :
+
+-  TiledGroupName -- The value is a string that identifies one of the tiled services 
+   available on the server
+-  Change -- A <Key>:<Value> pair, which will be passed to the server. The key has to 
+   match a change key that the server declares for the respective tiled group.
+   This option can be used multiple times, for different keys.
+   Example:
+   -  Change=time:2020-02-02
+
+These open options are only accepted if the corresponding XML element is not present in the 
+configuration file.
 
 VirtualEarth
 ~~~~~~~~~~~~
@@ -254,9 +269,9 @@ The DataWindow element might be omitted. The default values are :
 -  UpperLeftY = 20037508.34
 -  LowerRightX = 20037508.34
 -  LowerRightY = -20037508.34
--  TileLevel = 19
--  OverviewCount = 18
--  SRS = EPSG:900913
+-  TileLevel = 21
+-  OverviewCount = 20
+-  SRS = EPSG:3857
 -  BlockSizeX = 256
 -  BlockSizeY = 256
 
@@ -298,7 +313,7 @@ IIP:http://foo.com/FIF=image_name out.xml -of WMS"
 Examples
 --------
 
--  | `onearth_global_mosaic.xml <frmt_wms_onearth_global_mosaic.xml>`__
+-  | `onearth_global_mosaic.xml <https://github.com/OSGeo/gdal/blob/master/gdal/frmts/wms/frmt_wms_onearth_global_mosaic.xml>`__
      - Landsat mosaic from a `OnEarth <http://onearth.jpl.nasa.gov/>`__
      WMS server
 
@@ -399,7 +414,7 @@ The WMS driver can open :
 
    ::
 
-      gdalinfo "<GDAL_WMS><Service name=\"TiledWMS\"><ServerUrl>http://onearth.jpl.nasa.gov/wms.cgi?</ServerUrl><TiledGroupName>Global SRTM Elevation</TiledGroupName></Service></GDAL_WMS>"
+      gdalinfo "<GDAL_WMS><Service name=\"TiledWMS\"><ServerUrl>https://gibs.earthdata.nasa.gov/twms/epsg4326/best/twms.cgi?</ServerUrl><TiledGroupName>MODIS Terra CorrectedReflectance Bands367 tileset</TiledGroupName></Service></GDAL_WMS>"
 
 -  the base URL of a WMS service, prefixed with *WMS:* :
 
@@ -422,7 +437,7 @@ The WMS driver can open :
 
    ::
 
-      gdalinfo "WMS:http://onearth.jpl.nasa.gov/wms.cgi?request=GetTileService"
+      gdalinfo "WMS:https://gibs.earthdata.nasa.gov/twms/epsg4326/best/twms.cgi?request=GetTileService"
 
    A list of subdatasets will be returned, resulting from the parsing of
    the GetTileService request on that server.
@@ -466,7 +481,7 @@ See Also
 -  `TMS
    Specification <http://wiki.osgeo.org/wiki/Tile_Map_Service_Specification>`__
 -  `OnEarth Tiled WMS
-   specification <http://onearth.jpl.nasa.gov/tiled.html>`__
+   specification <http://web.archive.org/web/20130511182803/http://onearth.jpl.nasa.gov/tiled.html>`__
 -  `ArcGIS Server REST
    API <http://resources.arcgis.com/en/help/rest/apiref/>`__
 -  :ref:`raster.wmts` driver page.

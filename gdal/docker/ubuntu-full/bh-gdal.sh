@@ -42,7 +42,11 @@ wget -q "https://github.com/OSGeo/gdal/archive/${GDAL_VERSION}.tar.gz" \
       GDAL_CONFIG_OPTS="$GDAL_CONFIG_OPTS  --with-fgdb=/usr/local/FileGDB_API "
     fi
 
-    ./configure --prefix=/usr \
+    if echo "$WITH_PDFIUM" | grep -Eiq "^(y(es)?|1|true)$" ; then
+      GDAL_CONFIG_OPTS="$GDAL_CONFIG_OPTS  --with-pdfium=/usr "
+    fi
+
+    LDFLAGS="-L/build${PROJ_INSTALL_PREFIX-/usr/local}/lib -linternalproj" ./configure --prefix=/usr \
     --without-libtool \
     --with-hide-internal-symbols \
     --with-jpeg12 \

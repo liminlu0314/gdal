@@ -436,7 +436,6 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_LCP();
     GDALRegister_GTX();
     GDALRegister_LOSLAS();
-    GDALRegister_NTv1();
     GDALRegister_NTv2();
     GDALRegister_CTable2();
     GDALRegister_ACE2();
@@ -505,22 +504,12 @@ void CPL_STDCALL GDALAllRegister()
     GDALRegister_GEOR();
 #endif
 
-#ifdef FRMT_epsilon
-    GDALRegister_EPSILON();
-#endif
-
 #ifdef FRMT_postgisraster
     GDALRegister_PostGISRaster();
 #endif
 
 #ifdef FRMT_saga
     GDALRegister_SAGA();
-#endif
-
-#ifdef FRMT_ignfheightasciigrid
-    // IGNFHeightASCIIGrid must come before XYZ, otherwise XYZ might
-    // try and fail opening such files
-    GDALRegister_IGNFHeightASCIIGrid();
 #endif
 
 #ifdef FRMT_xyz
@@ -541,10 +530,6 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_ctg
     GDALRegister_CTG();
-#endif
-
-#ifdef FRMT_e00grid
-    GDALRegister_E00GRID();
 #endif
 
 #ifdef FRMT_zmap
@@ -598,6 +583,10 @@ void CPL_STDCALL GDALAllRegister()
 
 #ifdef FRMT_ogcapi
     GDALRegister_OGCAPI();
+#endif
+
+#ifdef FRMT_stacta
+    GDALRegister_STACTA();
 #endif
 
     // NOTE: you need to generally your own driver before that line.

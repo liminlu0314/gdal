@@ -1,6 +1,13 @@
 name: Windows builds
 
-on: [push, pull_request]
+on:
+    push:
+        paths-ignore:
+            - 'gdal/doc/**'
+    pull_request:
+        paths-ignore:
+            - 'gdal/doc/**'
+
 
 jobs:
 
@@ -61,19 +68,32 @@ jobs:
                 $env:WIN64_ARG="WIN64=YES"
                 $env:CMAKE_ARCHITECTURE="x64"
             }
-            echo "::set-env name=PATH::$env:PATH"
-            echo "::set-env name=ARCHITECTURE::$env:ARCHITECTURE"
-            echo "::set-env name=WIN64_ARG::$env:WIN64_ARG"
-            echo "::set-env name=CMAKE_ARCHITECTURE::$env:CMAKE_ARCHITECTURE"
+            echo "PATH=$env:PATH" >> $env:GITHUB_ENV
+            echo "ARCHITECTURE=$env:ARCHITECTURE" >> $env:GITHUB_ENV
+            echo "WIN64_ARG=$env:WIN64_ARG" >> $env:GITHUB_ENV
+            echo "CMAKE_ARCHITECTURE=$env:CMAKE_ARCHITECTURE" >> $env:GITHUB_ENV
 
       - name: Set compiler environment
         shell: cmd
         run: |
             if "%VS_VER%" == "2019" CALL "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=%ARCHITECTURE%
-            echo ::set-env name=PATH::%PATH%
-            echo ::set-env name=INCLUDE::%INCLUDE%
-            echo ::set-env name=LIB::%LIB%
-            echo ::set-env name=LIBPATH::%LIBPATH%
+            echo PATH=%PATH%>> %GITHUB_ENV%
+            echo INCLUDE=%INCLUDE%>> %GITHUB_ENV%
+            echo LIB=%LIB%>> %GITHUB_ENV%
+            echo LIBPATH=%LIBPATH%>> %GITHUB_ENV%
+
+      - name: Detect AVX2
+        shell: bash
+        run: |
+            set -e
+            cl .github/workflows/detect-avx2.c
+            if ./detect-avx2.exe; then
+                    echo "AVX2 available on CPU"
+                    echo "ARCH_FLAGS=/arch:AVX2" >> $GITHUB_ENV
+            else
+                    echo "AVX2 not available on CPU."
+                    echo "ARCH_FLAGS=" >> $GITHUB_ENV
+            fi
 
       - name: Build
         shell: pwsh
@@ -85,6 +105,7 @@ jobs:
                 & $ScriptBlock 2>&1 | ForEach-Object -Process { "$_" }
                 if ($LastExitCode -ne 0) { exit $LastExitCode }
             }
+            echo "ARCH_FLAGS = $env:ARCH_FLAGS"
             exec { git clone --depth=1 -b $env:PROJ_BRANCH https://github.com/OSGeo/PROJ proj }
             Import-PackageProvider NuGet -Force
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
@@ -166,6 +187,7 @@ jobs:
             $env:NMAKE_LOCAL+="NETCDF_LIB=`$(SDK_LIB)\netcdf.lib`n"
             $env:NMAKE_LOCAL+="NETCDF_INC_DIR=`$(SDK_INC)`n"
             $env:NMAKE_LOCAL+="NETCDF_HAS_NC4 = yes`n"
+            #$env:NMAKE_LOCAL+="NETCDF_HAS_NETCDF_MEM = yes`n"
             $env:NMAKE_LOCAL+="PROJ_INCLUDE=-I$env:GITHUB_WORKSPACE\install-proj\include`n"
             $env:NMAKE_LOCAL+="PROJ_LIBRARY=$env:GITHUB_WORKSPACE\install-proj\lib\proj.lib`n"
             # For some reason libzstd.dll and libdeflate.dll conflicts at runtime
@@ -198,7 +220,7 @@ jobs:
             #
             cd $env:GITHUB_WORKSPACE\gdal
             copy $env:GITHUB_WORKSPACE\install-proj\bin\*.dll .
-            exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS=/WX }
+            exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS="/WX $env:ARCH_FLAGS" }
             cd apps
             exec { nmake /f makefile.vc test_ogrsf.exe MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS=/WX }
             $env:DISTUTILS_USE_SDK=1
@@ -206,9 +228,10 @@ jobs:
             cd $env:GITHUB_WORKSPACE\gdal\swig\python
             exec { python setup.py build }
             exec { python setup.py install }
-            cd $env:GITHUB_WORKSPACE\gdal\swig\csharp
-            exec { nmake /f makefile.vc interface }
-            exec { nmake /f makefile.vc all $env:WIN64_ARG }
+            # Disabled because of https://github.com/OSGeo/gdal/issues/3711
+            #cd $env:GITHUB_WORKSPACE\gdal\swig\csharp
+            #exec { nmake /f makefile.vc interface }
+            #exec { nmake /f makefile.vc all $env:WIN64_ARG }
             cd $env:GITHUB_WORKSPACE\autotest\cpp
             exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG }
 
@@ -235,5 +258,6 @@ jobs:
             cd $env:GITHUB_WORKSPACE\autotest
             pip install -Ur requirements.txt
             exec { pytest -vv }
-            cd $env:GITHUB_WORKSPACE\gdal\swig\csharp
-            exec { nmake /f makefile.vc test }
+            # Disabled because of https://github.com/OSGeo/gdal/issues/3711
+            #cd $env:GITHUB_WORKSPACE\gdal\swig\csharp
+            #exec { nmake /f makefile.vc test }

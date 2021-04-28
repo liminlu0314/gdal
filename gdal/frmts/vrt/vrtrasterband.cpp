@@ -375,6 +375,22 @@ CPLErr VRTRasterBand::XMLInit( CPLXMLNode * psTree,
         }
     }
 
+    const char* pszBlockXSize = CPLGetXMLValue( psTree, "blockXSize", nullptr );
+    if( pszBlockXSize )
+    {
+        int nBlockXSizeIn = atoi(pszBlockXSize);
+        if( nBlockXSizeIn >= 32 && nBlockXSizeIn <= 16384 )
+            nBlockXSize = nBlockXSizeIn;
+    }
+
+    const char* pszBlockYSize = CPLGetXMLValue( psTree, "blockYSize", nullptr );
+    if( pszBlockYSize )
+    {
+        int nBlockYSizeIn = atoi(pszBlockYSize);
+        if( nBlockYSizeIn >= 32 && nBlockYSizeIn <= 16384 )
+            nBlockYSize = nBlockYSizeIn;
+    }
+
 /* -------------------------------------------------------------------- */
 /*      Apply any band level metadata.                                  */
 /* -------------------------------------------------------------------- */
@@ -641,6 +657,12 @@ CPLXMLNode *VRTRasterBand::SerializeToXML( const char *pszVRTPath )
 
     if( nBand > 0 )
         CPLSetXMLValue( psTree, "#band", CPLSPrintf( "%d", GetBand() ) );
+
+    if( nBlockXSize != 128 && nBlockXSize != nRasterXSize )
+        CPLSetXMLValue( psTree, "#blockXSize", CPLSPrintf( "%d", nBlockXSize ) );
+
+    if( nBlockYSize != 128 && nBlockYSize != nRasterYSize )
+        CPLSetXMLValue( psTree, "#blockYSize", CPLSPrintf( "%d", nBlockYSize ) );
 
     CPLXMLNode *psMD = oMDMD.Serialize();
     if( psMD != nullptr )
@@ -1130,6 +1152,10 @@ void VRTRasterBand::GetFileList(char*** ppapszFileList, int *pnSize,
 int VRTRasterBand::GetOverviewCount()
 
 {
+    VRTDataset* poVRTDS = static_cast<VRTDataset *>( poDS );
+    if( !poVRTDS->AreOverviewsEnabled() )
+        return 0;
+
     // First: overviews declared in <Overview> element
     if( !m_aoOverviewInfos.empty() )
         return static_cast<int>(m_aoOverviewInfos.size());
@@ -1140,7 +1166,6 @@ int VRTRasterBand::GetOverviewCount()
         return nOverviewCount;
 
     // If not found, implicit virtual overviews
-    VRTDataset* poVRTDS = static_cast<VRTDataset *>( poDS );
     poVRTDS->BuildVirtualOverviews();
     if( !poVRTDS->m_apoOverviews.empty() && poVRTDS->m_apoOverviews[0] )
         return static_cast<int>( poVRTDS->m_apoOverviews.size() );

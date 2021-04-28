@@ -51,8 +51,8 @@ def check_no_file_leaks():
 
     diff = len(gdaltest.get_opened_files()) - num_files
 
-    if diff != 0 and gdaltest.is_travis_branch('trusty_clang'):
-        print('Mysterious leak of file handle on trusty_clang')
+    if diff != 0 and gdaltest.is_travis_branch('ubuntu_1804'):
+        print('Mysterious leak of file handle on ubuntu_1804')
         return
 
     assert diff == 0, 'Leak of file handles: %d leaked' % diff
@@ -847,3 +847,21 @@ def test_bag_read_tracking_list():
     assert f['uncertainty'] == 9.5
     assert f['track_code'] == 10
     assert f['list_series'] == 11
+
+
+
+###############################################################################
+#
+
+
+def test_bag_write_and_check_xml_size_and_res():
+
+    tmpfilename = '/vsimem/out.bag'
+    gdal.Translate(tmpfilename, 'data/byte.tif', options='-ot Float32 -outsize 20 10')
+
+    ds = gdal.Open(tmpfilename)
+    xml = ds.GetMetadata_List('xml:BAG')[0]
+    xml = xml.replace('  ', '').replace('\n', '').replace('> <','><')
+    assert '<gmd:axisDimensionProperties><gmd:MD_Dimension><gmd:dimensionName><gmd:MD_DimensionNameTypeCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_DimensionNameTypeCode" codeListValue="row">row</gmd:MD_DimensionNameTypeCode></gmd:dimensionName><gmd:dimensionSize><gco:Integer>10</gco:Integer></gmd:dimensionSize><gmd:resolution><gco:Measure uom="m">120</gco:Measure></gmd:resolution></gmd:MD_Dimension></gmd:axisDimensionProperties><gmd:axisDimensionProperties><gmd:MD_Dimension><gmd:dimensionName><gmd:MD_DimensionNameTypeCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_DimensionNameTypeCode" codeListValue="column">column</gmd:MD_DimensionNameTypeCode></gmd:dimensionName><gmd:dimensionSize><gco:Integer>20</gco:Integer></gmd:dimensionSize><gmd:resolution><gco:Measure uom="m">60</gco:Measure></gmd:resolution></gmd:MD_Dimension></gmd:axisDimensionProperties>' in xml
+
+    gdal.Unlink(tmpfilename)

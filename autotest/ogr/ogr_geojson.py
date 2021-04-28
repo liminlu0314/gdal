@@ -31,7 +31,7 @@
 import json
 import math
 import os
-
+import struct
 
 from osgeo import osr
 from osgeo import ogr
@@ -2174,7 +2174,16 @@ def test_ogr_geojson_57():
 { "type": "Feature", "properties": { }, "bbox": [ 135.0, 88.6984598, -135.0, 90.0 ], "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ -135.0, 88.6984598 ], [ -180.0, 90.0 ], [ -180.0, 89.0796531 ], [ -135.0, 88.6984598 ] ] ], [ [ [ 180.0, 90.0 ], [ 135.0, 88.6984598 ], [ 180.0, 89.0796531 ], [ 180.0, 90.0 ] ] ] ] } }
 ]
 }"""
-    assert json.loads(got) == json.loads(expected) or json.loads(got) == json.loads(expected_geos_overlay_ng), got
+    expected_geos_3_9_1 = """{
+"type": "FeatureCollection",
+"bbox": [ 135.0000000, 88.6984598, -135.0000000, 90.0000000 ],
+"features": [
+{ "type": "Feature", "properties": { }, "bbox": [ 135.0, 88.6984598, -135.0, 90.0 ], "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 135.0, 88.6984598 ], [ 180.0, 89.0796531 ], [ 180.0, 90.0 ], [ 135.0, 88.6984598 ] ] ], [ [ [ -135.0, 88.6984598 ], [ -180.0, 90.0 ], [ -180.0, 89.0796531 ], [ -135.0, 88.6984598 ] ] ] ] } }
+]
+}"""
+    assert json.loads(got) == json.loads(expected) or \
+           json.loads(got) == json.loads(expected_geos_overlay_ng) or \
+           json.loads(got) == json.loads(expected_geos_3_9_1), got
 
     # Polar case: EPSG:3031: WGS 84 / Antarctic Polar Stereographic
     src_ds = gdal.GetDriverByName('Memory').Create('', 0, 0, 0)
@@ -2240,7 +2249,7 @@ def test_ogr_geojson_57():
     assert ogrtest.check_feature_geometry(ogr.CreateGeometryFromJson(json.dumps(j_got["features"][1]["geometry"])), ogr.CreateGeometryFromJson(json.dumps(j_expected["features"][1]["geometry"]))) == 0
     assert ogrtest.check_feature_geometry(ogr.CreateGeometryFromJson(json.dumps(j_got["features"][2]["geometry"])), ogr.CreateGeometryFromJson(json.dumps(j_expected["features"][2]["geometry"]))) == 0
 
-    # Antimeridian case: EPSG:32660: WGS 84 / UTM zone 60N wit polygon on west of antimeridian
+    # Antimeridian case: EPSG:32660: WGS 84 / UTM zone 60N with polygon on west of antimeridian
     src_ds = gdal.GetDriverByName('Memory').Create('', 0, 0, 0)
     sr = osr.SpatialReference()
     sr.SetFromUserInput('+proj=utm +zone=60 +datum=WGS84 +units=m +no_defs')
@@ -3015,3 +3024,142 @@ def test_ogr_geojson_starting_with_geometry_coordinates():
     assert ds is not None
 
     gdal.Unlink(tmpfilename)
+
+
+###############################################################################
+# Test serialization of Float32 values
+
+def test_ogr_geojson_write_float32():
+
+    def cast_as_float(x):
+        return struct.unpack('f', struct.pack('f', x))[0]
+
+    filename = '/vsimem/test_ogr_geojson_write_float32.json'
+    ds = ogr.GetDriverByName('GeoJSON').CreateDataSource(filename)
+    lyr = ds.CreateLayer('foo')
+
+    fldn_defn = ogr.FieldDefn('float32', ogr.OFTReal)
+    fldn_defn.SetSubType(ogr.OFSTFloat32)
+    lyr.CreateField(fldn_defn)
+
+    fldn_defn = ogr.FieldDefn('float32list', ogr.OFTRealList)
+    fldn_defn.SetSubType(ogr.OFSTFloat32)
+    lyr.CreateField(fldn_defn)
+
+    f = ogr.Feature(lyr.GetLayerDefn())
+    f['float32'] = cast_as_float(0.35)
+    f['float32list'] = [
+        cast_as_float(123.0),
+        cast_as_float(0.35),
+        cast_as_float(0.15),
+        cast_as_float(0.12345678),
+        cast_as_float(1.2345678e-15),
+        cast_as_float(1.2345678e15),
+        cast_as_float(0.123456789), # more decimals than Float32 can hold
+    ]
+    lyr.CreateFeature(f)
+
+    ds = None
+
+    fp = gdal.VSIFOpenL(filename, 'rb')
+    data = gdal.VSIFReadL(1, 10000, fp).decode('ascii')
+    gdal.VSIFCloseL(fp)
+
+    gdal.Unlink(filename)
+
+    data = data.replace('e+0', 'e+').replace('e-0', 'e-')
+
+    assert '"float32": 0.35,' in data
+    assert '"float32list": [ 123.0, 0.35, 0.15, 0.12345678, 1.2345678e-15, 1.2345678e+15, 0.12345679 ]' in data
+
+
+###############################################################################
+# Test bugfix for #3172
+
+def test_ogr_geojson_write_float_exponential_without_dot():
+
+    filename = '/vsimem/test_ogr_geojson_write_float_exponential_without_dot.json'
+    ds = ogr.GetDriverByName('GeoJSON').CreateDataSource(filename)
+    lyr = ds.CreateLayer('foo')
+
+    fldn_defn = ogr.FieldDefn('float32', ogr.OFTReal)
+    fldn_defn.SetSubType(ogr.OFSTFloat32)
+    lyr.CreateField(fldn_defn)
+
+    fldn_defn = ogr.FieldDefn('float64', ogr.OFTReal)
+    lyr.CreateField(fldn_defn)
+
+    f = ogr.Feature(lyr.GetLayerDefn())
+    f['float32'] = 1e-7
+    f['float64'] = 1e-8
+    lyr.CreateFeature(f)
+
+    ds = None
+
+    fp = gdal.VSIFOpenL(filename, 'rb')
+    data = gdal.VSIFReadL(1, 10000, fp).decode('ascii')
+    gdal.VSIFCloseL(fp)
+
+    gdal.Unlink(filename)
+
+    # Check that the json can be parsed
+    json.loads(data)
+
+
+###############################################################################
+# Test bugfix for #3280
+
+def test_ogr_geojson_feature_starting_with_big_properties():
+
+    filename = '/vsimem/test_ogr_geojson_feature_starting_with_big_properties.json'
+    gdal.FileFromMemBuffer(filename,
+                           '{"properties":{"foo":"%s"},"type":"Feature","geometry":null}' % ('x' * 10000))
+    assert ogr.Open(filename) is not None
+    gdal.Unlink(filename)
+
+
+###############################################################################
+
+def test_ogr_geojson_export_geometry_axis_order():
+
+    # EPSG:4326 and lat,long data order
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(4326)
+    g = ogr.CreateGeometryFromWkt('POINT (49 2)')
+    g.AssignSpatialReference(sr)
+    before_wkt = g.ExportToWkt()
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }
+    assert g.ExportToWkt() == before_wkt
+
+    # EPSG:4326 and long,lat data order
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(4326)
+    sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    g = ogr.CreateGeometryFromWkt('POINT (2 49)')
+    g.AssignSpatialReference(sr)
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }
+
+    # CRS84 with long,lat CRS and data order
+    sr = osr.SpatialReference()
+    sr.SetFromUserInput("OGC:CRS84")
+    g = ogr.CreateGeometryFromWkt('POINT (2 49)')
+    g.AssignSpatialReference(sr)
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }
+
+    # Projected CRS with easting, northing order
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(32631)
+    g = ogr.CreateGeometryFromWkt('POINT (2 49)')
+    g.AssignSpatialReference(sr)
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }
+
+    # Projected CRS with northing, easting order
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(2393)
+    g = ogr.CreateGeometryFromWkt('POINT (49 2)')
+    g.AssignSpatialReference(sr)
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }
+
+    # No CRS
+    g = ogr.CreateGeometryFromWkt('POINT (2 49)')
+    assert json.loads(g.ExportToJson()) == { "type": "Point", "coordinates": [ 2.0, 49.0 ] }

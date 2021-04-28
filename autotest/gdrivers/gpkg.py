@@ -32,6 +32,7 @@
 import os
 import sys
 import pytest
+from test_py_scripts import samples_path
 
 # Make sure we run from the directory of the script
 if os.path.basename(sys.argv[0]) == os.path.basename(__file__):
@@ -47,7 +48,7 @@ import gdaltest
 
 def validate(filename, quiet=False):
 
-    path = '../../gdal/swig/python/samples'
+    path = samples_path
     if path not in sys.path:
         sys.path.append(path)
     try:
@@ -67,7 +68,7 @@ def validate(filename, quiet=False):
         gdal.VSIFCloseL(f)
         open(my_filename, 'wb').write(content)
     try:
-        validate_gpkg.check(my_filename)
+        validate_gpkg.check(my_filename, extra_checks=True, warning_as_error=True)
     except Exception as e:
         if not quiet:
             print(e)
@@ -213,12 +214,6 @@ def test_gpkg_1():
     assert validate('/vsimem/tmp.gpkg'), 'validation failed'
 
     out_ds = gdal.Open('/vsimem/tmp.gpkg')
-
-    # Check there's no ogr_empty_table
-    sql_lyr = out_ds.ExecuteSQL("SELECT COUNT(*) FROM sqlite_master WHERE name = 'ogr_empty_table'")
-    f = sql_lyr.GetNextFeature()
-    assert f.GetField(0) == 0
-    out_ds.ReleaseResultSet(sql_lyr)
 
     got_gt = out_ds.GetGeoTransform()
     for i in range(6):
@@ -1206,7 +1201,8 @@ def test_gpkg_15():
 
     # Repeated SetProjection()
     out_ds = gdal.Open('/vsimem/tmp.gpkg', gdal.GA_Update)
-    assert out_ds.GetProjectionRef() == ''
+    assert out_ds.GetSpatialRef().IsLocal()
+    assert out_ds.GetProjectionRef().find('Undefined cartesian SRS') >= 0
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(4326)
     ret = out_ds.SetProjection(srs.ExportToWkt())
@@ -1220,7 +1216,8 @@ def test_gpkg_15():
     out_ds = None
 
     out_ds = gdal.Open('/vsimem/tmp.gpkg')
-    assert out_ds.GetProjectionRef() == ''
+    assert out_ds.GetSpatialRef().IsLocal()
+    assert out_ds.GetProjectionRef().find('Undefined cartesian SRS') >= 0
     # Test setting on read-only dataset
     gdal.PushErrorHandler()
     ret = out_ds.SetProjection('')
@@ -2487,12 +2484,6 @@ def test_gpkg_39():
 
     ds = gdal.Open('/vsimem/gpkg_39.gpkg')
 
-    # Check there a ogr_empty_table
-    sql_lyr = ds.ExecuteSQL("SELECT COUNT(*) FROM sqlite_master WHERE name = 'ogr_empty_table'")
-    f = sql_lyr.GetNextFeature()
-    assert f.GetField(0) == 1
-    ds.ReleaseResultSet(sql_lyr)
-
     assert ds.GetRasterBand(1).DataType == gdal.GDT_Int16
     assert ds.GetRasterBand(1).Checksum() == 4672
     assert ds.GetMetadataItem('AREA_OR_POINT') == 'Area'
@@ -3189,7 +3180,7 @@ def test_gpkg_GeneralCmdLineProcessor():
            'scope=' not in ret_gdalinfo and \
            'scope=' not in ret_ogrinfo)
 
-    
+
 ###############################################################################
 
 

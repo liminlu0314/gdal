@@ -41,28 +41,21 @@ import test_py_scripts
 import pytest
 from collections import defaultdict
 
-# test that gdalnumeric is available, if not skip all tests
-gdalnumeric_not_available = False
+# test that numpy is available, if not skip all tests
+np = pytest.importorskip('numpy')
+gdal_calc = pytest.importorskip('osgeo_utils.gdal_calc')
+gdal_array = pytest.importorskip('osgeo.gdal_array')
 try:
-    from osgeo import gdalnumeric
-    from osgeo.utils import gdal_calc
-    import numpy as np
-    gdalnumeric.BandRasterIONumPy
-except (ImportError, AttributeError):
-    gdalnumeric_not_available = True
-
-if gdalnumeric_not_available:
-    pytest.skip("gdalnumeric is not available, skipping all tests", allow_module_level=True)
-script_path = test_py_scripts.get_py_script('gdal_calc')
-if script_path is None:
-    pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+    GDALTypeCodeToNumericTypeCode = gdal_array.GDALTypeCodeToNumericTypeCode
+except AttributeError:
+    pytestmark = pytest.mark.skip('osgeo.gdal_array.GDALTypeCodeToNumericTypeCode is unavailable')
 
 # Usage: gdal_calc.py [-A <filename>] [--A_band] [-B...-Z filename] [other_options]
 
 
 def check_file(filename_or_ds, checksum, i=None, bnd_idx=1):
     if gdal_calc.is_path_like(filename_or_ds):
-        ds = gdal.Open(filename_or_ds)
+        ds = gdal.Open(os.fspath(filename_or_ds))
     else:
         ds = filename_or_ds
     assert ds is not None, 'ds{} not found'.format(i if i is not None else '')
@@ -82,7 +75,7 @@ input_checksum = (12603, 58561, 36064, 10807)
 def get_input_file():
     infile = make_temp_filename(0)
     if not os.path.isfile(infile):
-        shutil.copy('../gcore/data/stefan_full_rgba.tif', infile)
+        shutil.copy(test_py_scripts.get_data_path('gcore') + 'stefan_full_rgba.tif', infile)
     return infile
 
 
@@ -113,6 +106,11 @@ def make_temp_filename_list(test_id, test_count, is_opt=False):
 
 def test_gdal_calc_py_1():
     """ test basic copy """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 1, 3
     out = make_temp_filename_list(test_id, test_count)
@@ -127,6 +125,11 @@ def test_gdal_calc_py_1():
 
 def test_gdal_calc_py_2():
     """ test simple formulas """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 2, 3
     out = make_temp_filename_list(test_id, test_count)
@@ -141,6 +144,11 @@ def test_gdal_calc_py_2():
 
 def test_gdal_calc_py_3():
     """ test --allBands option (simple copy) """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 3, 1
     out = make_temp_filename_list(test_id, test_count)
@@ -154,6 +162,11 @@ def test_gdal_calc_py_3():
 
 def test_gdal_calc_py_4():
     """ test --allBands option (simple calc) """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 4, 3
     out = make_temp_filename_list(test_id, test_count)
@@ -176,6 +189,11 @@ def test_gdal_calc_py_4():
 
 def test_gdal_calc_py_5():
     """ test python interface, basic copy """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 5, 4
     out = make_temp_filename_list(test_id, test_count)
@@ -195,10 +213,15 @@ def test_gdal_calc_py_5():
 
 def test_gdal_calc_py_6():
     """ test nodata """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     test_id, test_count = 6, 2
     out = make_temp_filename_list(test_id, test_count)
 
-    gdal.Translate(out[0], '../gcore/data/byte.tif', options='-a_nodata 74')
+    gdal.Translate(out[0], test_py_scripts.get_data_path('gcore') + 'byte.tif', options='-a_nodata 74')
     gdal_calc.Calc('A', A=out[0], overwrite=True, quiet=True, outfile=out[1], NoDataValue=1)
 
     for i, checksum in zip(range(test_count), (4672, 4673)):
@@ -211,38 +234,48 @@ def test_gdal_calc_py_6():
 
 def test_gdal_calc_py_7():
     """ test --optfile """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 7, 4
     out = make_temp_filename_list(test_id, test_count)
     opt_files = make_temp_filename_list(test_id, test_count, is_opt=True)
 
     with open(opt_files[0], 'w') as f:
-        f.write('-A {} --calc=A --overwrite --outfile {}'.format(infile, out[0]))
+        f.write(f'-A {infile} --calc=A --overwrite --outfile {out[0]}')
 
     # Lines in optfiles beginning with '#' should be ignored
     with open(opt_files[1], 'w') as f:
-        f.write('-A {} --A_band=2 --calc=A --overwrite --outfile {}'.format(infile, out[1]))
+        f.write(f'-A {infile} --A_band=2 --calc=A --overwrite --outfile {out[1]}')
         f.write('\n# -A_band=1')
 
     # options on separate lines should work, too
-    opts = '-Z {}'.format(infile), '--Z_band=2', '--calc=Z', '--overwrite', '--outfile  {}'.format(out[2])
+    opts = f'-Z {infile}', '--Z_band=2', '--calc=Z', '--overwrite', f'--outfile  {out[2]}'
     with open(opt_files[2], 'w') as f:
         for i in opts:
             f.write(i + '\n')
 
     # double-quoted options should be read as single arguments. Mixed numbers of arguments per line should work.
-    opts = '-Z {} --Z_band=2'.format(infile), '--calc "Z + 0"', '--overwrite --outfile {}'.format(out[3])
+    opts = f'-Z {infile} --Z_band=2', '--calc "Z + 0"', f'--overwrite --outfile {out[3]}'
     with open(opt_files[3], 'w') as f:
         for i in opts:
             f.write(i + '\n')
-
-    for i, checksum in zip(range(test_count), (input_checksum[0], input_checksum[1], input_checksum[1], input_checksum[1])):
-        test_py_scripts.run_py_script(script_path, 'gdal_calc', '--optfile {}'.format(opt_files[i]))
-        check_file(out[i], checksum, i+1)
+    for opt_prefix in ['--optfile ', '@']:
+        for i, checksum in zip(range(test_count), (input_checksum[0], input_checksum[1], input_checksum[1], input_checksum[1])):
+            test_py_scripts.run_py_script(script_path, 'gdal_calc', f'{opt_prefix}{opt_files[i]}')
+            check_file(out[i], checksum, i+1)
 
 
 def test_gdal_calc_py_8():
     """ test multiple calcs """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 8, 1
     out = make_temp_filename_list(test_id, test_count)
@@ -259,7 +292,7 @@ def test_gdal_calc_py_8():
 
 def my_sum(a, gdal_dt=None):
     """ sum using numpy """
-    np_dt = None if gdal_dt is None else gdal_calc.gdal_dt_to_np_dt[gdal_dt]
+    np_dt = GDALTypeCodeToNumericTypeCode(gdal_dt)
     concatenate = np.stack(a)
     ret = concatenate.sum(axis=0, dtype=np_dt)
     return ret
@@ -282,6 +315,11 @@ def test_gdal_calc_py_9():
     * single alpha for multiple datasets
     * extent = 'fail'
     """
+
+    script_path = test_py_scripts.get_py_script('gdal_calc')
+    if script_path is None:
+        pytest.skip("gdal_calc script not found, skipping all tests", allow_module_level=True)
+
     infile = get_input_file()
     test_id, test_count = 9, 9
     out = make_temp_filename_list(test_id, test_count)
@@ -306,8 +344,14 @@ def test_gdal_calc_py_9():
         kwargs = copy(common_kwargs)
         kwargs.update(inputs0)
         ds = gdal_calc.Calc(calc='a', outfile=outfile, **kwargs)
-        input_file = ds if return_ds else outfile
+        if return_ds:
+            input_file = ds
+        else:
+            # the dataset must be closed if we are to read it again
+            del ds
+            input_file = outfile
         inputs.append(input_file)
+
         check_file(input_file, checksums[i], i+1)
 
     inputs1 = dict()
@@ -338,7 +382,7 @@ def test_gdal_calc_py_9():
 
     # for summing 3 bytes we'll use GDT_UInt16
     gdal_dt = gdal.GDT_UInt16
-    np_dt = None if gdal_dt is None else gdal_calc.gdal_dt_to_np_dt[gdal_dt]
+    np_dt = GDALTypeCodeToNumericTypeCode(gdal_dt)
 
     # sum with overflow
     checksum = 12261

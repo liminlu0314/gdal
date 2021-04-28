@@ -457,6 +457,20 @@ def test_ogr_geos_isvalid_false():
 
     assert isring == 0
 
+
+###############################################################################
+
+
+def test_ogr_geos_isvalid_false_too_few_points():
+    g1 = ogr.CreateGeometryFromWkt('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 3 2, 2 2))')
+
+    with ogrtest.enable_exceptions():  # fail test if exception is thrown
+        with gdaltest.error_handler():
+            isvalid = g1.IsValid()
+
+    assert isvalid == 0
+
+
 ###############################################################################
 
 
@@ -502,5 +516,21 @@ def test_ogr_geos_polygonize():
     got = g.Polygonize()
     assert got is None, ('Got: %s' % got.ExportToWkt())
 
+###############################################################################
 
 
+def test_ogr_geos_prepared_geom():
+
+    g = ogr.CreateGeometryFromWkt('POLYGON((0 0,0 1,1 1,1 0,0 0))')
+    pg = g.CreatePreparedGeometry()
+
+    assert pg.Contains(ogr.CreateGeometryFromWkt('POINT(0.5 0.5)'))
+    assert not pg.Contains(ogr.CreateGeometryFromWkt('POINT(-0.5 0.5)'))
+
+    g2 = ogr.CreateGeometryFromWkt('POLYGON((0.5 0,0.5 1,1.5 1,1.5 0,0.5 0))')
+    assert pg.Intersects(g2)
+    assert not pg.Intersects(ogr.CreateGeometryFromWkt('POINT(-0.5 0.5)'))
+
+    # Test workaround for https://github.com/libgeos/geos/pull/423
+    assert not pg.Intersects(ogr.CreateGeometryFromWkt('POINT EMPTY'))
+    assert not pg.Contains(ogr.CreateGeometryFromWkt('POINT EMPTY'))

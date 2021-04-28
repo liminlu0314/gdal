@@ -368,9 +368,9 @@ public:
   }
   %clear char const *prj;
 
-  void SetSpatialRef(OSRSpatialReferenceShadow* srs)
+  CPLErr SetSpatialRef(OSRSpatialReferenceShadow* srs)
   {
-     GDALSetSpatialRef( self, (OGRSpatialReferenceH)srs );
+     return GDALSetSpatialRef( self, (OGRSpatialReferenceH)srs );
   }
 
 #ifdef SWIGPYTHON
@@ -513,7 +513,11 @@ public:
 %apply (GIntBig nLen, char *pBuf) { (GIntBig buf_len, char *buf_string) };
 %apply (GIntBig *optional_GIntBig) { (GIntBig*) };
 %apply (int *optional_int) { (int*) };
+#if defined(SWIGPYTHON)
+%apply (GDALDataType *optional_GDALDataType) { (GDALDataType *buf_type) };
+#else
 %apply (int *optional_int) { (GDALDataType *buf_type) };
+#endif
 %apply (int nList, int *pList ) { (int band_list, int *pband_list ) };
   CPLErr WriteRaster( int xoff, int yoff, int xsize, int ysize,
                       GIntBig buf_len, char *buf_string,
@@ -1002,6 +1006,20 @@ OGRErr AbortSQL() {
   {
       GDALDatasetClearStatistics(self);
   }
+
+  %apply Pointer NONNULL {const char* name};
+  OGRFieldDomainShadow* GetFieldDomain(const char* name)
+  {
+    return (OGRFieldDomainShadow*) GDALDatasetGetFieldDomain(self, name);
+  }
+  %clear const char* name;
+
+  %apply Pointer NONNULL {OGRFieldDomainShadow* fieldDomain};
+  bool AddFieldDomain(OGRFieldDomainShadow* fieldDomain)
+  {
+      return GDALDatasetAddFieldDomain(self, (OGRFieldDomainH)fieldDomain, NULL);
+  }
+  %clear OGRFieldDomainShadow* fieldDomain;
 
 } /* extend */
 }; /* GDALDatasetShadow */

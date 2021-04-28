@@ -1,7 +1,7 @@
 .. _gdal2tiles:
 
 ================================================================================
-gdal2tiles
+gdal2tiles.py
 ================================================================================
 
 .. only:: html
@@ -21,7 +21,7 @@ Synopsis
                   [-w webviewer] [-t title] [-c copyright]
                   [--processes=NB_PROCESSES] [--xyz]
                   --tilesize=PIXELS
-                  [-g googlekey] [-b bingkey] input_file [output_dir]
+                  [-g googlekey] [-b bingkey] input_file [output_dir] [COMMON_OPTIONS]
 
 Description
 -----------
@@ -42,11 +42,15 @@ can publish a picture without proper georeferencing too.
 .. note::
 
     Inputs with non-Byte data type (i.e. ``Int16``, ``UInt16``,...) will be clamped to
-    the ``Byte`` data type, causing wrong results. To awoid this it is necessary to
+    the ``Byte`` data type, causing wrong results. To avoid this it is necessary to
     rescale input to the ``Byte`` data type using `gdal_translate` utility.
 
+.. note::
 
-.. program:: gdal_translate
+    Config options of the input drivers may have an effect on the output of gdal2tiles. An example driver config option is GDAL_PDF_DPI, which can be found at :ref:`configoptions`
+
+
+.. program:: gdal2tiles
 
 .. option:: -p <PROFILE>, --profile=<PROFILE>
 
@@ -74,7 +78,7 @@ can publish a picture without proper georeferencing too.
 
 .. option:: -z <ZOOM>, --zoom=<ZOOM>
 
-  Zoom levels to render (format:'2-5' or '10').
+  Zoom levels to render (format:'2-5', '10-' or '10').
 
 .. option:: -e, --resume
 
@@ -88,6 +92,10 @@ can publish a picture without proper georeferencing too.
 .. option:: -v, --verbose
 
   Generate verbose output of tile generation.
+
+.. option:: -x, --exclude
+
+  Exclude transparent tiles from result tileset.
 
 .. option:: -q, --quiet
 
@@ -175,7 +183,6 @@ The following profiles are supported:
 - mercator: mapped to OSMTILE MapML tiling scheme
 - geodetic: mapped to WGS84 MapML tiling scheme
 - APSTILE: from the tms_MapML_APSTILE.json data file
-- CBMTILE: from the tms_MapML_CBMTILE.json data file
 
 The generated MapML file in the output directory is ``mapml.mapl``
 
@@ -188,7 +195,7 @@ Available options are:
     template_tiles.mapml file from GDAL data resources
     will be used
 
-The --url option is also used to substitue ``${URL}`` in the template MapML file.
+The --url option is also used to substitute ``${URL}`` in the template MapML file.
 
 Examples
 --------

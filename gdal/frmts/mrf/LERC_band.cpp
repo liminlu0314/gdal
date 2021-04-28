@@ -1,5 +1,5 @@
 /*
-Copyright 2013-2020 Esri
+Copyright 2013-2021 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,7 +16,7 @@ http://github.com/Esri/lerc/
 LERC band implementation
 LERC page compression and decompression functions
 
-Contributors:  Lucian Plesea
+Authors:  Lucian Plesea
 */
 
 #include "marfa.h"
@@ -154,7 +154,7 @@ template <typename T> static void Lerc1ImgFill(Lerc1Image& zImg, T* src, const I
             for (int col = 0; col < w; col++) {
                 float val = static_cast<float>(*src++);
                 zImg(row, col) = val;
-                zImg.mask.Set(row * w + col, !CPLIsEqual(ndv, val));
+                zImg.SetMask(row, col, !CPLIsEqual(ndv, val));
             }
         return;
     }
@@ -163,7 +163,7 @@ template <typename T> static void Lerc1ImgFill(Lerc1Image& zImg, T* src, const I
             float val = static_cast<float>(*src);
             src += stride;
             zImg(row, col) = val;
-            zImg.mask.Set(row * w + col, !CPLIsEqual(ndv, val));
+            zImg.SetMask(row, col, !CPLIsEqual(ndv, val));
         }
 }
 
@@ -475,7 +475,7 @@ CPLXMLNode *LERC_Band::GetMRFConfig(GDALOpenInfo *poOpenInfo)
     if (poOpenInfo->eAccess != GA_ReadOnly
         || poOpenInfo->pszFilename == nullptr
         || poOpenInfo->pabyHeader == nullptr
-        || strlen(poOpenInfo->pszFilename) < 2)
+        || strlen(poOpenInfo->pszFilename) < 1)
         // Header of Lerc2 takes 58 bytes, an empty area 62 or more, depending on the subversion.
         // Size of Lerc1 empty file is 67
         // || poOpenInfo->nHeaderBytes < static_cast<int>(Lerc2::ComputeNumBytesHeader()))
@@ -508,17 +508,11 @@ CPLXMLNode *LERC_Band::GetMRFConfig(GDALOpenInfo *poOpenInfo)
         }
     }
 
+    // Try Lerc1
     if (size.x <= 0 && sHeader.size() >= Lerc1Image::computeNumBytesNeededToWriteVoidImage()) {
-        Lerc1Image zImg;
-        size_t nRemainingBytes = poOpenInfo->nHeaderBytes;
-        Lerc1NS::Byte *pb = reinterpret_cast<Lerc1NS::Byte *>(psz);
-        // Read only the header, changes pb
-        if (zImg.read(&pb, nRemainingBytes, 1e12, true))
-        {
-            size.x = zImg.getWidth();
-            size.y = zImg.getHeight();
-
-            // Get the desired type
+        if (Lerc1Image::getwh(reinterpret_cast<Lerc1NS::Byte*>(psz), poOpenInfo->nHeaderBytes,
+            size.x, size.y)) {
+            // Get the desired type, if set by caller
             dt = GDALGetDataTypeByName(
                 CSLFetchNameValueDef(poOpenInfo->papszOpenOptions, "DATATYPE", "Byte"));
         }
@@ -537,7 +531,12 @@ CPLXMLNode *LERC_Band::GetMRFConfig(GDALOpenInfo *poOpenInfo)
     CPLCreateXMLElementAndValue(raster, "DataFile", poOpenInfo->pszFilename);
     // Set a magic index file name to prevent the driver from attempting to open it
     CPLCreateXMLElementAndValue(raster, "IndexFile", "(null)");
-
+    // The NDV could be passed as an open option
+    const char* pszNDV = CSLFetchNameValueDef(poOpenInfo->papszOpenOptions, "NDV", "");
+    if (strlen(pszNDV) > 0) {
+        CPLXMLNode* values = CPLCreateXMLNode(raster, CXT_Element, "DataValues");
+        XMLSetAttributeVal(values, "NoData", pszNDV);
+    }
     return config;
 }
 

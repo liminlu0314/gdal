@@ -62,7 +62,7 @@ Examples:
 
 .kmz, .ods and .xlsx extensions are also detected as valid extensions for zip-compatible archives.
 
-Starting with GDAL 2.2, an alternate syntax is available so as to enable chaining and not being dependent on .zip extension, e.g.: :file:`/vsizip/{/path/to/the/archive}/path/inside/the/zip/file`. Note that :file:`/path/to/the/archive` may also itself use this alternate syntax.
+Starting with GDAL 2.2, an alternate syntax is available so as to enable chaining and not being dependent on .zip extension, e.g.: ``/vsizip/{/path/to/the/archive}/path/inside/the/zip/file``. Note that :file:`/path/to/the/archive` may also itself use this alternate syntax.
 
 Write capabilities are also available. They allow creating a new zip file and adding new files to an already existing (or just created) zip file.
 
@@ -311,6 +311,8 @@ Authentication options, and read-only features, are identical to :ref:`/vsigs/ <
 
 /vsiaz/ is a file system handler that allows on-the-fly random reading of (primarily non-public) files available in Microsoft Azure Blob containers, without prior download of the entire file. It requires GDAL to be built against libcurl.
 
+See :ref:`/vsiadls/ </vsiadls/>` for a related filesystem for Azure Data Lake Storage Gen2.
+
 It also allows sequential writing of files. No seeks or read operations are then allowed, so in particular direct writing of GeoTIFF files with the GTiff driver is not supported, unless, if, starting with GDAL 3.2, the :decl_configoption:`CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE` configuration option is set to ``YES``, in which case random-write access is possible (involves the creation of a temporary local file, whose location is controlled by the :decl_configoption:`CPL_TMPDIR` configuration option).
 A block blob will be created if the file size is below 4 MB. Beyond, an append blob will be created (with a maximum file size of 195 GB).
 
@@ -328,8 +330,11 @@ Several authentication methods are possible, and are attempted in the following 
     a) The :decl_configoption:`AZURE_STORAGE_ACCESS_KEY` configuration option is set to specify the secret key.
     b) The :decl_configoption:`AZURE_NO_SIGN_REQUEST=YES` configuration option is set, so as to disable any request signing. This option might be used for accounts with public access rights. Available since GDAL 3.2
     c) The :decl_configoption:`AZURE_SAS` configuration option is set to specify a Shared Access Signature. This SAS is appended to URLs built by the /vsiaz/ file system handler. Its value should already be URL-encoded and should not contain any leading '?' or '&' character (e.g. a valid one may look like "st=2019-07-18T03%3A53%3A22Z&se=2035-07-19T03%3A53%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=2RIXmLbLbiagYnUd49rgx2kOXKyILrJOgafmkODhRAQ%3D"). Available since GDAL 3.2
+    d) The current machine is a Azure Virtual Machine with Azure Active Directory permissions assigned to it (see https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm). Available since GDAL 3.3
 
 Since GDAL 3.1, the :cpp:func:`VSIRename` operation is supported (first doing a copy of the original file and then deleting it)
+
+Since GDAL 3.3, the :cpp:func:`VSIGetFileMetadata` and :cpp:func:`VSISetFileMetadata` operations are supported.
 
 .. versionadded:: 2.3
 
@@ -345,6 +350,33 @@ Recognized filenames are of the form :file:`/vsiaz_streaming/container/key` wher
 Authentication options, and read-only features, are identical to :ref:`/vsiaz/ </vsiaz/>`
 
 .. versionadded:: 2.3
+
+.. _`/vsiadls/`:
+
+/vsiadls/ (Microsoft Azure Data Lake Storage Gen2)
+++++++++++++++++++++++++++++++++++++++++++++++++++
+
+/vsiadls/ is a file system handler that allows on-the-fly random reading of
+(primarily non-public) files available in Microsoft Azure Data Lake Storage file
+systems, without prior download of the entire file.
+It requires GDAL to be built against libcurl.
+
+It has similar capabilities as :ref:`/vsiaz/ </vsiaz/>`, and in particular uses the same
+configuration options for authentication. Its advantages over /vsiaz/ are a real
+management of directory and Unix-style ACL support. Some features require the Azure
+storage to have hierarchical support turned on. Consult its
+`documentation <https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-introduction>`__
+
+The main enhancements over /vsiaz/ are:
+
+  * True directory support (no need for the artificial :file:`.gdal_marker_for_dir`
+    empty file that is used for /vsiaz/ to have empty directories)
+  * One-call recursive directory deletion with :cpp:func:`VSIRmdirRecursive`
+  * Atomic renaming with :cpp:func:`VSIRename`
+  * :cpp:func:`VSIGetFileMetadata` support for the "STATUS" and "ACL" metadata domains
+  * :cpp:func:`VSISetFileMetadata` support for the "PROPERTIES" and "ACL" metadata domains
+
+.. versionadded:: 3.3
 
 .. _`/vsioss/`:
 

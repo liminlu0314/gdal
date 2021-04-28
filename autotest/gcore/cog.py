@@ -37,13 +37,14 @@ from osgeo import gdal
 from osgeo import osr
 
 import gdaltest
+from test_py_scripts import samples_path
 
 ###############################################################################
 
 
 def _check_cog(filename):
 
-    path = '../../gdal/swig/python/samples'
+    path = samples_path
     if path not in sys.path:
         sys.path.append(path)
     import validate_cloud_optimized_geotiff
@@ -137,6 +138,7 @@ def test_cog_creation_options():
     ds = gdal.Open(filename)
     assert ds.GetRasterBand(1).Checksum() == 4672
     assert ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') == 'DEFLATE'
+    assert ds.GetMetadataItem('PREDICTOR', 'IMAGE_STRUCTURE') is None
     ds = None
     filesize = gdal.VSIStatL(filename).size
     _check_cog(filename)
@@ -152,6 +154,9 @@ def test_cog_creation_options():
                                                            'PREDICTOR=YES',
                                                            'LEVEL=1'])
     assert gdal.VSIStatL(filename).size != filesize
+    ds = gdal.Open(filename)
+    assert ds.GetMetadataItem('PREDICTOR', 'IMAGE_STRUCTURE') == '2'
+    ds = None
 
     gdal.GetDriverByName('COG').CreateCopy(filename, src_ds,
                                                 options = ['COMPRESS=DEFLATE',
@@ -252,6 +257,37 @@ def test_cog_creation_of_overviews():
     assert ds.GetRasterBand(1).GetOverview(1).Checksum() == cs2
     ds = None
     _check_cog(filename)
+
+    src_ds = None
+    gdal.GetDriverByName('GTiff').Delete(filename)
+    gdal.Unlink(directory)
+
+###############################################################################
+# Test creation of overviews with a different compression method
+
+def test_cog_creation_of_overviews_with_compression():
+    directory = '/vsimem/test_cog_creation_of_overviews_with_compression'
+    filename = directory + '/cog.tif'
+    src_ds = gdal.Translate('', 'data/byte.tif',
+                            options='-of MEM -outsize 2048 300')
+
+    ds = gdal.GetDriverByName('COG').CreateCopy(filename, src_ds,
+                                            options = ['COMPRESS=LZW', 'OVERVIEW_COMPRESS=JPEG', 'OVERVIEW_QUALITY=50'])
+
+    assert ds.GetRasterBand(1).GetOverviewCount() == 2
+    assert ds.GetMetadata('IMAGE_STRUCTURE')['COMPRESSION'] == 'LZW'
+
+    ds_overview_a = gdal.Open('GTIFF_DIR:2:' + filename)
+    assert ds_overview_a.GetMetadata('IMAGE_STRUCTURE')['COMPRESSION'] == 'JPEG'
+    assert ds_overview_a.GetMetadata('IMAGE_STRUCTURE')['JPEG_QUALITY'] == '50'
+
+    ds_overview_b = gdal.Open('GTIFF_DIR:3:' + filename)
+    assert ds_overview_b.GetMetadata('IMAGE_STRUCTURE')['COMPRESSION'] == 'JPEG'
+    assert ds_overview_a.GetMetadata('IMAGE_STRUCTURE')['JPEG_QUALITY'] == '50'
+
+    ds_overview_a = None
+    ds_overview_b = None
+    ds = None
 
     src_ds = None
     gdal.GetDriverByName('GTiff').Delete(filename)
@@ -402,7 +438,7 @@ def test_cog_byte_to_web_mercator():
     for i in range(6):
         if gt[i] != pytest.approx(expected_gt[i], abs=1e-10 * abs(expected_gt[i])):
             assert False, gt
-    assert ds.GetRasterBand(1).Checksum() in (4363, 4264) # 4264 on Mac
+    assert ds.GetRasterBand(1).Checksum() in (4363, 4264, 4362) # 4264 on Mac , 4362 on Mac / Conda
     assert ds.GetRasterBand(1).GetMaskBand().Checksum() == 4356
     assert ds.GetRasterBand(1).GetOverviewCount() == 2
     ds = None
@@ -483,7 +519,7 @@ def test_cog_byte_to_web_mercator_manual():
     for i in range(6):
         if gt[i] != pytest.approx(expected_gt[i], abs=1e-10 * abs(expected_gt[i])):
             assert False, gt
-    assert ds.GetRasterBand(1).Checksum() in (4363, 4264) # 4264 on Mac
+    assert ds.GetRasterBand(1).Checksum() in (4363, 4264, 4362) # 4264 on Mac , 4362 on Mac / Conda
     assert ds.GetRasterBand(1).GetMaskBand().Checksum() == 4356
     assert ds.GetRasterBand(1).GetOverviewCount() == 2
     ds = None
@@ -1000,7 +1036,7 @@ def test_cog_overview_size():
 
 def test_cog_float32_color_table():
 
-    src_ds = gdal.GetDriverByName('MEM').Create('', 1024, 1024, 1, gdal.GDT_Float32) 
+    src_ds = gdal.GetDriverByName('MEM').Create('', 1024, 1024, 1, gdal.GDT_Float32)
     src_ds.GetRasterBand(1).Fill(1.0)
     ct = gdal.ColorTable()
     src_ds.GetRasterBand(1).SetColorTable(ct)
