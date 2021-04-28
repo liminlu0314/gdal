@@ -64,7 +64,10 @@
 #include "mdreader/reader_tianhui.h"
 #include "mdreader/reader_triplesat.h"
 #include "mdreader/reader_ziyuan.h"
+<<<<<<< HEAD
 #include "mdreader/reader_common.h"
+=======
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
 CPL_CVSID("$Id$")
 
@@ -211,11 +214,14 @@ GDALMDReaderBase* GDALMDReaderManager::GetReader(const char *pszPath,
 		INIT_READER(GDALMDReaderZiYuan3);
 	}
 
+<<<<<<< HEAD
     if (nType & MDR_COMMON)
     {
         INIT_READER(GDALMDReaderCommon);
     }
 
+=======
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
     return nullptr;
 }
 

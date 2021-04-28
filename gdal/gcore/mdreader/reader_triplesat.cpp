@@ -43,6 +43,7 @@ CPL_CVSID("$Id$");
 /**
  * GDALMDReaderTripleSat()
  */
+<<<<<<< HEAD
 GDALMDReaderTripleSat::GDALMDReaderTripleSat(const char *pszPath, char **papszSiblingFiles) :
     GDALMDReaderBase(pszPath, papszSiblingFiles),
     m_osXMLSourceFilename(GDALFindAssociatedFile(pszPath, "XML", papszSiblingFiles, 0))
@@ -74,6 +75,22 @@ GDALMDReaderTripleSat::GDALMDReaderTripleSat(const char *pszPath, char **papszSi
     if(!m_osRPCSourceFilename.empty() )
         CPLDebug( "MDReaderTripleSat", "RPB Filename: %s",
             m_osRPCSourceFilename.c_str() );
+=======
+GDALMDReaderTripleSat::GDALMDReaderTripleSat(const char *pszPath,
+									   char **papszSiblingFiles) :
+		GDALMDReaderBase(pszPath, papszSiblingFiles)  ,
+    m_osXMLSourceFilename ( GDALFindAssociatedFile( pszPath, "XML",
+                                                         papszSiblingFiles, 0 ) ),
+    m_osRPBSourceFilename ( GDALFindAssociatedFile( pszPath, "RPB",
+                                                         papszSiblingFiles, 0 ) )
+{
+    if(!m_osXMLSourceFilename.empty() )
+        CPLDebug( "MDReaderTripleSat", "IMD Filename: %s",
+              m_osXMLSourceFilename.c_str() );
+    if(!m_osRPBSourceFilename.empty() )
+        CPLDebug( "MDReaderTripleSat", "RPB Filename: %s",
+              m_osRPBSourceFilename.c_str() );
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 }
 
 /**
@@ -88,7 +105,11 @@ GDALMDReaderTripleSat::~GDALMDReaderTripleSat()
  */
 bool GDALMDReaderTripleSat::HasRequiredFiles() const
 {
+<<<<<<< HEAD
 	if (!m_osXMLSourceFilename.empty() && !m_osRPCSourceFilename.empty())
+=======
+	if (!m_osXMLSourceFilename.empty() && !m_osRPBSourceFilename.empty())
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
         return true;
 
     return false;
@@ -102,8 +123,13 @@ char** GDALMDReaderTripleSat::GetMetadataFiles() const
     char **papszFileList = NULL;
     if(!m_osXMLSourceFilename.empty())
         papszFileList= CSLAddString( papszFileList, m_osXMLSourceFilename );
+<<<<<<< HEAD
     if(!m_osRPCSourceFilename.empty())
         papszFileList= CSLAddString( papszFileList, m_osRPCSourceFilename );
+=======
+    if(!m_osRPBSourceFilename.empty())
+        papszFileList= CSLAddString( papszFileList, m_osRPBSourceFilename );
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
     return papszFileList;
 }
@@ -130,7 +156,11 @@ void GDALMDReaderTripleSat::LoadMetadata()
     
 	m_papszDEFAULTMD = CSLAddNameValue(m_papszDEFAULTMD, MD_NAME_MDTYPE, "TripleSat");
 
+<<<<<<< HEAD
     m_papszRPCMD = GDALLoadRPCFile(m_osRPCSourceFilename.c_str());
+=======
+    m_papszRPCMD = GDALLoadRPBFile(m_osRPBSourceFilename.c_str());
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
     m_bIsMetadataLoad = true;
 

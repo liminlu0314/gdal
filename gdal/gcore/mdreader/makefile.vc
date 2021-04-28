@@ -2,8 +2,12 @@ OBJ	=	reader_digital_globe.obj reader_geo_eye.obj reader_orb_view.obj \
                 reader_pleiades.obj reader_rdk1.obj reader_landsat.obj \
                 reader_spot.obj reader_rapid_eye.obj reader_alos.obj \
                 reader_eros.obj reader_kompsat.obj reader_gaofen.obj \
+<<<<<<< HEAD
                 reader_tianhui.obj reader_triplesat.obj reader_ziyuan.obj \
 				reader_common.obj
+=======
+                reader_tianhui.obj reader_triplesat.obj reader_ziyuan.obj
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
 GDAL_ROOT	=	..\..
                 

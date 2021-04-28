@@ -194,6 +194,7 @@ void CPL_DLL GDALRegister_JP2Lura(void);
 void CPL_DLL GDALRegister_PRF(void);
 void CPL_DLL GDALRegister_NULL(void);
 void CPL_DLL GDALRegister_RDA(void);
+<<<<<<< HEAD
 void CPL_DLL GDALRegister_EEDAI(void);
 void CPL_DLL GDALRegister_EEDA(void);
 void CPL_DLL GDALRegister_SIGDEM(void);
@@ -209,6 +210,11 @@ void CPL_DLL GDALRegister_TGA(void);
 void CPL_DLL GDALRegister_OGCAPI(void);
 
 void CPL_DLL GDALRegister_TFATMBTiles(void);
+=======
+void CPL_DLL GDALRegister_TFATMBTiles(void);
+void CPL_DLL GDALRegister_CNSDTF(void);
+void CPL_DLL GDALRegister_LANDSAT(void);
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 CPL_C_END
 
 #endif /* ndef GDAL_FRMTS_H_INCLUDED */

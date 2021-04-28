@@ -30,7 +30,11 @@
 #ifndef READER_TRIPLESAT_H_INCLUDED
 #define READER_TRIPLESAT_H_INCLUDED
 
+<<<<<<< HEAD
 #include "../gdal_mdreader.h"
+=======
+#include "reader_pleiades.h"
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 
 /**
 Metadata reader for TripleSat
@@ -59,7 +63,11 @@ protected:
     virtual time_t GetAcquisitionTimeFromString(const char* pszDateTime) override;
 protected:
     CPLString m_osXMLSourceFilename;
+<<<<<<< HEAD
     CPLString m_osRPCSourceFilename;
+=======
+    CPLString m_osRPBSourceFilename;
+>>>>>>> 51b6d7e63e (添加对中国卫星数据元数据的支持，同时将加载RPC和保存RPC相关函数导出)
 };
 
 #endif // READER_TRIPLESAT_H_INCLUDED
